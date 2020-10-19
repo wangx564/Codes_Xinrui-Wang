@@ -1,0 +1,183 @@
+---
+title: "STA303 Assignment 2"
+author: "Xinrui Wang"
+date: "2020/3/4"
+output: word_document
+---
+```{r, eval=FALSE}
+install.packages("Pmisc", repos = "http://R-Forge.R-project.org", type = "source")
+
+packages_w4 <- c("tidyverse", "lme4", "nlme", "htmlTable", "lmtest")
+new.packages <- packages_w4[!(packages_w4 %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+```
+
+
+
+```{r, eval = TRUE, message=FALSE}
+library(tidyverse) 
+library(Pmisc)
+library(lme4)
+library(nlme)
+library(htmlTable)
+library(lmtest)
+```
+
+## Question 1: Linear mixed models
+
+```{r, eval = TRUE, echo = TRUE, message = FALSE}
+q1d = read_csv("school.csv")
+attach(q1d)
+```
+# Question 1a
+
+The concern would be that the data or the score of students collected within in the same school may not be independent since students in better schools tend to have higher test scores. This violates the independence assumption of linear regression.
+
+# Question 1b
+```{r, eval = TRUE, echo = TRUE}
+library(ggplot2)
+
+ggplot(data = q1d, aes(x = iq, y = test)) +  geom_point(alpha = 0.5) + geom_smooth(method= "lm", se = FALSE) + geom_point() + ggtitle("Scatterplot of Language Test Scores vs Verbal IQ Scores") + theme_classic()
+```
+
+Overall, the points and the best fit line shows that the language test scores are generally higher for students with higher verbal IQ scores. But this may not be the real case becasue the residuals are large and the points do not form an obivious straight line. This shows that there is no/a weak linear relationship between 2 variables.
+
+# Question 1c
+```{r, eval = TRUE, echo = TRUE,message = FALSE}
+q1nd = q1d %>% 
+  group_by(school) %>% mutate(mean_ses = mean(ses), mean_iq = mean(iq))
+detach(q1d)
+attach(q1nd)
+```
+
+# Question 1d
+```{r, eval = TRUE, echo = TRUE}
+l = lm(test ~ iq + sex + ses + minority_status + mean_ses + mean_iq)
+summary(l)
+confint(l)
+```
+
+1) The intercept is the average of language test scores for all male students that are not ethnic minorities in the data set.
+
+2) 
+$\bullet$ CIs for covariates `iq`, `sex`, `ses`, and `mean_iq` does not include 0, and the entire CI is above 0. This means these variables are positively correlated to students' test scores, keeping other factors fixed. 
+
+$\bullet$ The CI for `mean_ses` does not include 0, and the entire CI is below 0. This means that the average of socioeconomic status of student family withinin schools adversely affect the test scores, keeping other factors fixed. Also, we are 95% confident that the interval [-0.3066319, -0.1244709] captures the true value of the coefficient.
+
+$\bullet$ The CI for `minority_status` includes 0, which means whether the student is from ethnic minorities is not associated with the language test score at the significance level of 5%, keeping other factors fixed.
+
+# Question 1e
+```{r, eval=TRUE, echo=TRUE, message=FALSE}
+lmm = lme4::lmer(test ~ iq + sex + ses + minority_status + mean_ses + mean_iq + (1|school))
+
+summary(lmm)
+confint(lmm)
+```
+For the fixed effects:
+There is no change in the significance of covariates. And there are minor changes in some of the coefficient estimates. So that the interpretations for the fixed effects would be similar as that in 1d.
+
+For the random effects:
+In the `confint` output, `.sig01` is the CI for the standard deviation of the random effect; `.sigma` is the CI for the residual standard deviation.
+
+`.sig01` shows that the standard deviation for the random effect/baseline test scores is betweem 2.1818595 and 3.51821014 (at 5% significance level), which is entirely above 0. This means that a random effect is worth fitting.
+
+`.sigma` shows that the residuals have greater variations than the random effects. This implis there are variations, after fitting the fixed effects, the differences between schools can not account for.
+
+# Question 1f
+```{r}
+dim(q1nd)
+length(unique(q1nd$school))
+```
+
+
+The fixed effects interpretations (whether and how the covariates are correlated with `test`) are the same as 1d since there is no change in the sign of $\hat\beta's$ or the location of CIs for all 6 covariates with respect to 0.
+However, values of estimates for `sex`, `minority_status`, and `mean_iq ` changed more than the other 3 covariates. 
+
+Besides, the CIs for the intercept variables in the LM
+
+This can be the result of fitting a random intercept (using different baseline scores) for schools in the model.
+
+# Question 1g
+```{r}
+re <- lme4::ranef(lmm, condVar = TRUE) 
+ranef_df <- as.data.frame(re)
+
+ranef_df %>%
+ggplot(aes(x = grp, y = condval, ymin = condval - 2*condsd, ymax = condval + 2*condsd)) + geom_point() + geom_errorbar() + coord_flip() + xlab("schools")
+```
+Since the CIs are not overlapping/the CIs are obviously different, so it is reasonal to include a random effect.
+
+# Question 1h
+
+1) 
+2) Differences between schools account for 8.177/(8.177+38.240) = 17.62% of the residual variance after accounting for the fixed effects in the model.
+
+## Question 2: Generalised linear mixed models
+
+# Question 2a
+The statistical model is logit($μ_{ij} = X_{ij}β + A_i + B_{ij}$) where $μ_{ij}$ is the probability of students form the $j^{th}$ school of the $i^{th}$ state have used chewing tobacco, snuff, or dip on 1 or more days in the past 30 days; $A_i$ is the state effect and $B_{ij}$ is the school effect.
+
+The difference between this model and the GLM is that random effects ($A_i$ and $B_{ij}$) have been added to the model besides the fixed effects($X_{ij}β$).
+And in the code, we've added the term `(1 | state/school)` to add school nested within state mixed effects to the GLM model.
+
+# Question 2b
+
+We are interested in the probability and the response variables are binary. So, comparing to LMM, GLMM can be used with responses following binomial distributions in this dataset. And a logit link is chosen due to the binomial distribution of the reponse variables.
+
+# Question 2c
+
+1) In `Table 3`, the last 2 rows in `sd` show 95% CIs for standard deviations in random effects. `school:state` is for SD in the random effect of schools nested within states, [0.59, 0.95], and `state` is for the SD in random effects across states, [0.13, 0.74]. See that the CI for nested effect is wider than that for states, therefore, there are greater variations between schools in states than states. Also, by looking at `Figure 1`, the onditional mean and 50% prediction interval for random effects of states ranges from -0.4 to 0.4 whereas that for school nested within states range from -1.0 to 2.0. Thus, the hypothesis of state-level differences is larger than school-level differences within states is rejected.
+
+2) Here, since more of the variation in chewing tobacco usage is explained by school differences within states than between states, so finding individual schools with more tobacco chewers is more important than finding states. 
+
+## Question 3: Death on the roads
+# Question 3a
+
+```{r, message = FALSE, eval = TRUE,echo = FALSE}
+pedestrainFile = Pmisc::downloadIfOld(
+'http://pbrown.ca/teaching/303/data/pedestrians.rds') 
+```
+
+```{r,eval = TRUE,echo = FALSE}
+pedestrians = readRDS(pedestrainFile) 
+pedestrians = pedestrians[!is.na(pedestrians$time), ]
+pedestrians$y = pedestrians$Casualty_Severity == 'Fatal'
+theGlm = glm(y ~ sex + age + Light_Conditions + Weather_Conditions, data = pedestrians, family = binomial(link = "logit"))
+
+theGlmInt = glm(y ~ sex * age + Light_Conditions + Weather_Conditions, data = pedestrians, family = binomial(link = "logit"))
+```
+
+Here, the cases are pedestrians involved in motor vehicle accidents with fatal injuries. The controls are pedestrians involved in motor vehicle accidents with slight injuries.
+
+$\bullet$ In `theGlm`, the covariates are `sex`, `Light_Conditions`, `Weather_Conditions`(categorical variable), and `age`(numeric variable). The intercept is the estimated log odds that the male ages between 26 - 35 involved in motor vehicle accidents with fatal injuries in a fine weather with no high winds under the daylight.
+
+$\bullet$ In `theGlmInt`, the covariates are `sex * age`(interaction), `Light_Conditions`, `Weather_Conditions`(categorical variable). The intercept interpretation is the same as the one above.
+
+Here, we used the logistic regression, where the response is linked to a linear combination of of covariates with a logit link. 
+
+log($\frac{\lambda_i}{1-\lambda_i}$) = $\beta_0 + \sum_{p=1}^{P}X_{ip}\beta_p$
+where $Y_i$ represents the injury status(fatal or slight) in the accident , $X_i's$ represent the covariates, P is the number of covariates, and $\lambda_i$ = P($Y_i$ = 1|$X_i$) be the probability of the pedestrian has fatal injuries in the accident given covariates. 
+
+# Question 3b
+
+```{r,eval = TRUE, echo=TRUE}
+lmtest::lrtest(theGlm, theGlmInt)
+```
+I define people ages between 16 and 20 as teenagers and in their early adulthoods for this question.
+
+1) I would use the model `theGlmInt` since the question address the probability of females between 16 and 20 involved in vehicle accidents with fatal injuries so that it is necessary to include the interaction term to see how satisfying both conditions changes the probability relative to the reference group. Also, the LRT above shows a small p-value, suggesting that `theGlmInt` explains the data better.
+
+From the summary of `theGlmInt` outputs, the log odds of teenage females involved in motor vehicle accidents with fatal injuries is about 0.150 higher than that of males between 26 and 35 since in the reference group. 
+Besides, from `Table 6`, we are 95% confident that the odds of female ages 16-20 involved in motor vehicle accidents with fatal injuries is betweem 1.03 and 1.31 times of the odds for the reference group.
+
+2) However, if we take a look at the other estimates from the models, the log odds of females involved in motor vehicle accidents with fatal injuries is lower than that for the males in the reference group on average. (From `Table 6`, the entire CI for odds ratios of women is less than 1 using both models.)
+And from `Figure 2`, the predicted probability of involving in motor vehicle accidents with fatal injuries with 99% CI using `theGlmInt` for females (red lines) is below that for males in general in baseline conditions (daylight, fine no wind).  
+
+Besides, since the reference group only contains males between 26 and 35, we can not make conclusions for the entire male group based on the outputs.
+
+Therefore, I conclude that women in all age groups tend to be, on average, safer as pedestrians than men in all age groups in a fine weather with no high winds under the daylight. But on average, women ages between 16-20 tend to be less careful/unsafer pedestrians than men in the reference group.
+
+# Question 3c
+
+The idea of women are generally more willing to seek medical attention for health problems than men implies that the number of slight injuries reported from accidents by male would be less than the amount there should be. Thus the assumption of $P(Z_i|Y_i , X_i ) = P(Z_i |Y_i )$ (inclusion in the study doesn't depend on covariates, like gender, only injury status) is violated. As a result, males would be underrepresented in the controls and we would overestimate the effect of gender on behaviours of pedestrians, making the control group no longer valid. 

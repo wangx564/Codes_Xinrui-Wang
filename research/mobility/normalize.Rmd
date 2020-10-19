@@ -1,0 +1,16 @@
+---
+title: "Normalize"
+author: ""
+date: ""
+output: html_document
+---
+```{r}
+```{r}
+# Try Normalizing the Data
+s = decimal_date(dat_G_CA[1,7])
+e = decimal_date(dat_G_CA[nrow(dat_G_CA),7])
+
+tsd = ts(ddd[,-1], start = s, end = e, frequency = 365.25)
+```
+```
+

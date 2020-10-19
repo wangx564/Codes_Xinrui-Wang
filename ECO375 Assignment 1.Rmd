@@ -1,0 +1,207 @@
+---
+title: "Untitled"
+author: "Xinrui Wang"
+date: "2020/2/8"
+output:
+  word_document: default
+  html_document: default
+---
+C1
+```{r}
+library(foreign)
+c1d <- read.dta("401K.DTA")
+attach(c1d)
+```
+(i) 
+```{r}
+y_a = mean(prate)
+x_a = mean(mrate)
+y_a
+x_a
+```
+The average participation rate is 87.36 percent.
+The average match rate is 0.73.
+(ii)
+```{r}
+l = lm(prate ~ mrate)
+summary(l)
+```
+See from the output that $\hat\beta_0$ = 83.08 and $\hat\beta_1$ = 5.86.
+Therefore, the linear model implies that $\widehat{prate}$ = 83.08 + 5.86$\widehat{mrate}$. Sample size = 1534 and $R^2$ = 0.075.
+
+(iii)
+$\hat\beta_0$: 83.08 is the expected value of prate when the corresponding mrate = 0.
+$\hat\beta_1$, the coefficient on mrate: 5.86 is the change in the expected value of prate for a 1-unit increase in corresponding mrate.
+
+(iv)
+```{r}
+y_h = 83.0755 +  5.8611*3.5
+y_h
+y_r = c(NA)
+j = 0
+for (i in 1:length(mrate))
+  {if (mrate[i] == 3.5)
+    {
+    y_r[j] = prate[i]
+    j = j + 1
+  }
+  return(y_r)
+}
+plot(mrate, prate)
+```
+$\widehat{prate}$ = 83.08 + 5.86*3.5 = 103.59.
+This is not a reasonable prediction since from the scatterplot, there is not a clear linear relationship between two variables. Therefore, the linear model $\widehat{prate}$ = $\hat\beta_0$ + $\hat\beta_1$$\widehat{mrate}$ cannot be fit into the data. So that the predicted value using this model is not reasonable.
+
+(v) $R^2$ =  0.075, meaning that only 7.5% of the variation in prate can be explained by the model. Since this value is much smaller than 100%, this model cannot explain a lot of vairations in prate.
+
+Ch3
+
+```{r}
+gpad <- read.dta("gpa2.dta")
+attach(gpad)
+```
+Q1
+i)
+Yes, it make sense. I would prove this by assuming the coefficient of hsperc is nonnegative. In this case, students with higher hsperc (or performed worse in the high school graduating class) tend to get either higher college GPA or the same college GPA as those who performed well in high school graduating classed, keeping the value of sat constant. But this result is against the general belief. Therefore, as nonnegative coefficient is irreasonable, negative slope becomes reasonable if we want to include hsperc as a predictor of college GPA.
+
+ii)
+$\widehat{colgpa}$ = 1.392-0.0135x20+0.00148x1,050 = 2.676
+```{r}
+1.392-.0135*20+.00148*1050
+```
+
+iii)
+$\Delta_{\widehat{colgpa}}$ = 0.00148x140 = 0.2072.
+As A has 140 points higher in SAT, her college GPA is predicted to be about 0.21 higher than student B.
+This is not a large difference.
+```{r}
+0.00148*140
+```
+iv)
+0.5 = 0.00148x$\Delta_{sat}$ -> $\Delta_{sat}$ â‰? 338.
+This means that students with 338 higher in SAT is predicted to have 0.5 higher college GPA, holding the percentile they graduate from high schools the same.
+
+```{r}
+0.5/.00148
+
+```
+
+
+Q3
+```{r}
+ceod <- read.dta("CEOSAL2.DTA")
+attach(ceod)
+```
+i)
+A constant elasticity model is $\log(salary_i)$ = $\beta_0+\beta_1\log(sales_i)+\beta_2\log(mktval_i)+u_i$ . That is, $lsalary_i = \beta_0 + \beta_1lsales_i + \beta_2lmktval_i+u_i$.
+```{r}
+ceol = lm(lsalary ~ lsales + lmktval)
+summary(ceol)
+```
+Estimating this equation gives $\widehat{lsalary_i} = 4.621 + 0.162lsales_i + 0.107lmktval_i$.
+
+ii)
+```{r}
+ceol_2 = lm(lsalary ~ lsales + lmktval + profits)
+summary(ceol_2)
+```
+The variable 'profits' is not included in the logarithmic form beacuse profits can be negative. And the log of a negative number is undefined.
+
+By fitting the new model, I got $R^2_{adj} = 0.2872$. This is a relatively small number, saying that around 29% of the variation in 'lsalary' can be explained by this model. Therefore, firm performance variables do not explain most of the variation in CEO salaries.
+
+(iii)
+```{r}
+ceol_3 = lm(lsalary ~ lsales + lmktval + profits + ceoten)
+summary(ceol_3)
+```
+From the output, see that the regression coefficient of 'ceoten' is 0.0117, which means the estimated salary would increase by 1.17% for another year of CEO tenure, holding other factors fixed.
+
+iv)
+```{r}
+cor(lmktval,profits)
+```
+The sample correlation coefficient between the 2 variables is 0.78, which can be considered as highly correlated. Due to the existence of multicollinearity, the assumption of MLR is violated and the variances of OLS estimators are increased.
+
+ch4
+Q3
+i)
+For a 1% increase in 'sales' leads to 0.00321 percentage point increase in estimated value of expenditures on R&D as a percentage of sales, holding other factors fixed.
+
+For a 10% increase in 'sales' leads to around 0.0321 percentage point increase in estimated 'rdintens', holding other factors fixed.
+
+It's not economically large, since for 1% increase in sales, expenditures on R&D would only increase by 0.00321 percentage points. This is a small increase in expenditure for R&D.
+
+(ii)
+
+```{r}
+detach(ceod)
+rdd <- read.dta("RDCHEM.DTA")
+attach(rdd)
+```
+As $rdintens = \beta_0+\beta_1log(sales) + \beta_2profmarg +u$,the hypotheses are
+$H_0:\beta_1 = 0$
+$H_a:\beta_1 \not= 0$
+```{r}
+rdl = lm(rdintens ~ lsales + profmarg)
+summary(rdl)
+```
+From the output, see that the corresponding p-value is 0.147, which is larger than both 5% and 10%. Therefore, we don't have evidence against $H_0$ and we fail to reject $H_0$ at both levels. This means that data are consistent with the $H_0$ of R&D intensity does not change with sales.
+
+iii) The coefficient on profmarg is 0.05, which means for one percentage point increase in profits as a percentage of sales, the estimated expenditures on (R&D) as a percentage of sales would increase 0.05 percentage points, holding all other factors fixed.
+
+This is not economically large since only $\frac{1}{20}$ of the increase in 'profmarg' is used for R&D.
+
+iv)
+See that the corresponding p-value is 0.283, which is relatively large, therefore, the model implies 'profmarg' doesn't have a statistically significant effect on 'rdintens'.
+
+C8
+i)
+```{r}
+ind <- read.dta("401ksubs.dta")
+attach(ind)
+sum(fsize == 1)
+```
+There are 2017 single-person households in the data set.
+ii)
+```{r}
+fwd = subset(ind,fsize == 1)
+detach(ind)
+attach(fwd)
+fwl = lm(nettfa ~ inc + age)
+summary(fwl)
+```
+From the output, estimating the equation gives $\widehat{nettfa_i} = -43.04 + 0.8inc_i + 0.84age_i$.
+$\hat\beta_{1}$: One thousand dollar increase in annual (family) income would increase the estimated net financial wealth by 800 dollar.
+$\hat\beta_{2}$: Being one year older would increase the estimated net financial wealth by 840 dollar. 
+
+It is surprising that when keeping all other factors constant, increase in age increases the estimated net financial wealth more than that of annual income. And it is not surprising that the slope estimates are all positive.
+
+iii)
+intercept estimate = -43.04, which implies -43040 dollar is the average net financial wealth of people at the age of 0 when being surveyed, being the only person in the household and has 0 annual income.
+
+But, this value is not reasonbale because: 
+1. 0-year-old baby cannot live in a household by him/herself or taking the survey.
+2. 0 is not in the range of 'age' of the dataset.
+3. Investigating the net financial wealth of the newborn baby is meaningless.
+```{r}
+sum(age == 0)
+```
+iv)
+$H_0$: $\beta_2$=1
+$H_a$: $\beta_2<1$
+The test statistic, T, is $\frac{\hat\beta_2-1}{SE(\hat\beta_2)} = \frac{0.84266-1}{SE(\hat\beta_2)} = \frac{-0.15734}{0.09202} = -1.709846$. And T ~ $t_{n-k-1}$, where n-k-1 = 2017-2-1 = 2014.
+The p-value = p($t_{(2014)}$> |-1.709846|) = 0.044.
+This value is larger than the $\alpha$ of 1%. Therefore, we don't have evidence against $H_0$ so that we fail to reject $H_0$ at 1% significance level. This means that data are consistent with the $H_0$ of $\beta_2$=1.
+
+```{r}
+pval = 1- pt(abs(-1.709846),2014)
+pval
+```
+
+v)
+```{r}
+l2 = lm(nettfa ~ inc)
+summary(l2)
+```
+Here, the estimated coefficient on 'inc' is 0.82, which is close to the 0.79 in the previous model. There is not much difference between the two. As the impact of 'inc' on estimated 'nettfa' is similar with and without the predictor 'age', it implies that there is almost no multicollinearity between 'age' and 'inc'.
+

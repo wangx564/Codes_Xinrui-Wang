@@ -1,0 +1,97 @@
+---
+title: "A3"
+author: "Xinrui Wang"
+date: "2019/11/26"
+output: word_document
+---
+Q1 
+1) Data clearing
+```{r, echo=FALSE, results = FALSE}
+d = read.csv("reale_a3data.csv")
+hd = na.omit(d)
+attach(hd)
+lotsize = lotwidth * lotlength
+hd2 = cbind(hd,lotsize)
+detach(hd)
+attach(hd2)
+```
+
+2) Correlation matrix and Scatterplot Matrix
+```{r, echo=TRUE, results=FALSE}
+cordat = subset(hd2, select = -c(Case_ID, location))
+c = round(cor(cordat),4)
+View(c)
+pairs(cordat, main = "Scatterplot Matrix_0063")
+```
+
+Q2
+i)
+```{r, echo=FALSE, results=FALSE}
+l = lm(Sale ~ lotsize)
+plot(lotsize,rstandard(l),xlab = "Lotsize", ylab = "Standardized Residual", main = "Standardized Residual vs Lotsize_0063") + abline(h = 0, col= "purple")
+```
+```{r, echo=FALSE,results=FALSE}
+sort(c[,1], decreasing = TRUE)
+     
+```
+
+Q3
+i)
+```{r, echo=FALSE, results=FALSE}
+
+# if location is "O", d = 0; if location is "X", d = 1
+levels(location) = c("0","1")
+
+#fit in MLR model
+
+mlr = lm(Sale ~ list + bedrooms + bathrooms + lotwidth + lotlength + maxsqfoot + taxes + location + lotsize)
+
+```
+
+ii)
+```{r, echo=FALSE, results=FALSE}
+round(coef(mlr), 4)
+summary(mlr)
+```
+
+Q4
+i)
+```{r, echo=FALSE, results=FALSE}
+par(mfrow=c(2,2))
+plot(mlr, main = "Diagnostic Plot_0063")
+```
+
+ii)
+```{r, echo=FALSE, results=FALSE}
+#sorting cases based on their leverage
+hii=hatvalues(mlr)
+round(sort(hii, decreasing=TRUE)[1:12], 4)
+
+#sorting cases based on their Cook's distance
+cooks = cooks.distance(mlr)
+round(sort(cooks, decreasing=TRUE)[1:12], 4)
+
+#sorting cases based on standardized residual
+round(sort(abs(rstandard(mlr)), decreasing=TRUE)[1:12], 4)
+
+#sorting cases based on residual
+round(sort(abs(mlr$residuals), decreasing=TRUE)[1:12], 4)
+```
+
+Q5
+```{r, echo=FALSE, results=FALSE}
+aicm = step(mlr, direction = "backward")
+summary(aicm)
+round(coef(aicm), 4)
+anova(aicm, mlr)
+```
+
+Q6
+```{r, echo=FALSE, results=FALSE}
+bicm = step(mlr, direction = "backward", k=log(162))
+summary(bicm)
+round(coef(bicm), 4)
+anova(bicm,mlr)
+anova(bicm,aicm)
+```
+

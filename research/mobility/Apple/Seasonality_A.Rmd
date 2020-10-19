@@ -1,0 +1,215 @@
+---
+title: "USA Mobility (Apple)"
+author: ''
+date: ''
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+```{r, echo = TRUE, eval = TRUE, message = FALSE}
+packages = c("xlsx", "tidyverse", "viridis", "forecast", "fpp", "ggfortify", "zoo", "xts", "forecast", "TTR", "deseasonalize")
+lapply(packages, library, character.only = TRUE)
+```
+
+```{r, cache = TRUE, echo = FALSE, message = FALSE}
+
+dat_A_US = as.data.frame(read.xlsx("Mobility_A.xlsx", sheetName = "Sample_Apple_UNITED STATES")) #US
+
+reg_info_A = as.data.frame(read.xlsx("US State-Level Regulations_A2.xlsx", sheetName = "State-Level Regulations_A"))
+```
+
+```{r,cache = TRUE, echo = FALSE, message = FALSE}
+
+#change the column names to dates
+for(i in 7:length(names(dat_A_US))){
+  num = substring(names(dat_A_US)[i], 2)
+  names(dat_A_US)[i] = format(as.Date(as.numeric(num), origin = "1899-12-30"),format = "%Y-%m-%d")
+  dat_A_US[, i] = (dat_A_US[, i] - 100)/100
+}
+
+#take Colorado as an example
+for(i in 2:length(rownames(reg_info_A))){
+  nname = gsub("??\\s","",reg_info_A$State.territory[i])
+  reg_info_A[i,1] = nname
+}
+
+for(i in 2:length(names(reg_info_A))){
+  reg_info_A[1,i] = as.Date(reg_info_A[1,i]) 
+}
+colnames(reg_info_A) = as.character(c("State or Territory", "State of Emergency", "Stay-at-Home", "Face Coverings", "Gatherings Banned", "Out-of-State Travel", "School Closures", "Daycare Closures", "Bar&Sit-Down Restaurant Closures", "Retail Closures"))
+```
+
+```{r,cache = TRUE, echo = FALSE, message = FALSE}
+#take state Colorado as example
+
+pd = dat_A_US %>%
+  filter(region == "Colorado")
+
+pd = as.data.frame(t(as.matrix(pd[,7:ncol(pd)])))
+d = cbind(rownames(pd), data.frame(pd, row.names = NULL))
+colnames(d) = c("Dates","driving")
+d$Dates = as.Date(d$Dates)
+
+reg_info.new = reg_info_A[,2:ncol(reg_info_A)]
+reg = mutate(reg_info.new, Dates = rownames(reg_info.new)) %>%
+  gather(key = "Regulation", value = "Dates", -Dates)
+``` 
+
+```{r,cache = TRUE, echo = FALSE, message = FALSE}
+# to plot for state Colorado + regulation timeline:
+len = nrow(reg)
+
+p = ggplot(data = d, aes(x = Dates, y = driving)) + geom_line(color = "#00AFBB", size = 1) + xlab("") + ylab("Mobility (% change)") + ggtitle("Change in Driving Mobility of State Colorado") + theme_minimal() 
+
+p1 = p + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_x_date(date_labels = "%y %b %d") + geom_hline(yintercept = 0, linetype = "dashed") 
+
+p1 = p1 + geom_vline(data = reg, mapping = aes(xintercept = as.numeric(reg[, 2]), colour = Regulation), size = 0.8, show.legend = TRUE)
+```
+
+```{r,cache = TRUE, echo = FALSE, message = FALSE}
+pd2 = dat_A_US %>%
+  filter(geo_type == "sub-region")
+pdat = as.data.frame(t(as.matrix(pd2[, 7:ncol(pd2)])))
+d2 = cbind(rownames(pdat), data.frame(pdat, row.names = NULL))
+colnames(d2) = c("Dates", pd2$region)
+d2$Dates = as.Date(d2$Dates)
+d3 = d2  %>%
+  select(Dates, pd2$region) %>%
+  gather(key = "Types", value = "Value", -Dates)
+
+p2 = ggplot(d3, aes(x = Dates, y = Value)) + geom_line(aes(color = Types), size = 0.1) + xlab("") + ylab("Mobility (% change)") + ggtitle("Walking and Driving Mobility in USA") + theme_minimal()
+```
+
+### remove seasonality
+```{r, cache = TRUE, echo = TRUE, message = FALSE}
+d = na.omit(d)
+pd3 = xts(d$driving, as.Date(d$Dates, format = '%Y-%m-%d'))
+```
+
+## method 1, use diff() 
+```{r, cache = TRUE, echo = TRUE, error = TRUE}
+# first-differencing a time series at a lag equal to the period will remove a seasonal trend 
+#Reference: https://nwfsc-timeseries.github.io/atsa-labs/sec-tslab-differencing-to-remove-a-trend-or-seasonal-effects.html
+diff(pd3, differences = 1, lag = 366) 
+#insufficient daily data
+```
+
+## method 2, use decompose() & diff() 
+```{r, cache = TRUE, echo = TRUE, error = TRUE}
+decomd = decompose(pd3)
+pd3adj = pd3 - decomd$seasonal #removing seasonality 
+n = ndiffs(pd3adj)
+pd4 = diff(pd3adj, differences = n) #making the data stationary
+p3 = autoplot(pd4) + scale_x_date(date_labels = "%B-%Y")
+```
+
+## method 3, use stl()
+```{r, cache = TRUE, echo = TRUE, error = TRUE}
+decompose(pd3)
+stl(pd3)
+# has insufficient periods
+```
+
+## method 4, use SMA() to smooth time series data
+```{r, cache = TRUE, echo = TRUE, error = TRUE}
+ma1 = SMA(pd3, n = 7) 
+p5 = autoplot(ma1) + xlab("") + ylab("% Change in Mobility") + ggtitle("Adjusted %Change in Driving Mobility of State Colorado")
+
+ma2 = SMA(pd3, n = 30) 
+p6 = autoplot(ma2) + xlab("") + ylab("% Change in Mobility") + ggtitle("Adjusted %Change in Driving Mobility of State Colorado") 
+
+#Reference: https://a-little-book-of-r-for-time-series.readthedocs.io/en/latest/src/timeseries.html
+#https://bookdown.org/kochiuyu/technical-analysis-with-r-second-edition/simple-moving-average-sma.html#ttr
+```
+
+## method 5, using tslm()
+```{r, cache = TRUE, echo = TRUE, error = TRUE}
+dd.s = diff(pd3, lag = 366)
+# Deseasonalize the data
+dd.mod = tslm(dd.s ~ season)
+dd.res = residuals(dd.m)
+
+#insufficient daily data
+```
+
+## method 6, work on only weekly & monthly values
+```{r, cache = TRUE, echo = TRUE, error = TRUE}
+#get weekly values
+wkd = d %>%
+  filter(row_number() %% 7 == 1) %>%
+  na.omit()
+wkd1 = xts(wkd$driving, as.Date(wkd$Dates, format = '%Y-%m-%d'))
+wkd2 = pd %>%
+  filter(row_number() %% 7 == 1) %>%
+  na.omit() %>%
+  ts(start = c(2020, 2), frequency = 52)
+#get monthly values (January to July)
+interval = c(1, 32, 61, 92, 120, 151, 181)
+mthd = d %>%  
+  slice(interval) %>%
+  na.omit()
+mthd1 = xts(mthd$driving, as.Date(mthd$Dates, format = '%Y-%m-%d'))
+
+mthd2 = pd %>%  
+  slice(interval) %>%
+  na.omit(mthd) %>%
+  ts(start = c(2020, 1), end = c(2020, 8), frequency = 12)
+```
+
+# using diff()
+```{r, cache = TRUE, echo = TRUE, error = TRUE}
+diff(wkd1, differences = 1, lag = 52)
+diff(mthd1, differences = 1, lag = 12)
+#insufficient weekly and monthly data
+```
+
+# using X11 decomposition for monthly data
+```{r, cache = TRUE, echo = TRUE, error = TRUE}
+f = seas(mthd2, x11 = "")
+#insufficient annually data 
+```
+
+# using ds() from deseasonalize package
+```{r, cache = TRUE, echo = TRUE, error = TRUE}
+ds(mthd2, type = c("monthly"), searchQ = TRUE)
+#need at least one year (366 days or 12 months)
+```
+
+# using tslm() & diff()
+```{r, cache = TRUE, echo = TRUE, error = TRUE}
+#Reference: http://people.brandeis.edu/~blebaron/classes/fin250a/regression/gdpSeasonal.html#some-r-experiments
+
+pd5 = diff(wkd2, lag = 52)
+pd6 = diff(mthd2, lag = 12)
+# Deseasonalize the data
+
+wkd.mod = tslm(pd5 ~ season)
+wkd.res = residuals(wkds)
+mth.mod = tslm(pd6 ~ season)
+mth.res = residuals(mths)
+#insufficient weekly and monthly data
+```
+
+# use tslm()
+```{r, cache = TRUE, echo = TRUE, error = TRUE}
+#weekly data
+wkd.mod2 = tslm(wkd2 ~ season) 
+wkd.mean = mean(wkd2)
+wkd.sa = wkd.mod2$residuals + wkd.mean
+wkd.sa.ts = xts(as.vector(wkd.sa), as.Date(wkd$Dates, format = '%Y-%m-%d'))
+p7 = autoplot(wkd.sa.ts) + xlab("") + ylab("% Change in Mobility") + ggtitle("Adjusted %Change in Driving Mobility of State Colorado") 
+p7
+#This method doesn't work, since wkd.mod2$residuals = 0.
+
+#monthly data
+mthd.mod2 = tslm(mthd2 ~ seasonaldummy(mthd2))
+mthd.mean = mean(mthd2)
+mthd.sa = mthd.mod2$residuals + mthd.mean
+mthd.sa.ts = xts(as.vector(mthd.sa), as.Date(c(mthd$Dates, "2020-08-13"), format = '%Y-%m-%d'))
+p8 = autoplot(mthd.sa.ts) + xlab("") + ylab("% Change in Mobility") + ggtitle("Adjusted %Change in Driving Mobility of State Colorado")
+p8
+#This method doesn't work, since mthd.mod2$residuals = 0.
+#Reference: http://people.brandeis.edu/~blebaron/classes/fin250a/regression/trendSeason.html#logan-example-with-seasonals
+```
+

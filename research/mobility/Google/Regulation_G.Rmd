@@ -1,0 +1,147 @@
+---
+title: "USA Mobility (Google)"
+author: ''
+date: ''
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+```{r,message = FALSE, cache = TRUE, echo = FALSE, message = FALSE}
+# Load the packages
+packages = c("xlsx", "tidyverse", "viridis", "forecast", "fpp", "ggfortify", "zoo", "xts", "forecast", "TTR")
+#install.packages(packages)
+lapply(packages, library, character.only = TRUE)
+```
+
+```{r, cache = TRUE, echo = FALSE, message = FALSE}
+#since the dataset is too large, R can only read data for one state at a time
+dat_G_USA = as.data.frame(read.xlsx("Mobility_G.xlsx", sheetName = "Sample_Google_US_State_WYOMING"))
+
+reg_info_G = as.data.frame(read.xlsx("US State-Level Regulations_G.xlsx", sheetName = "State-Level Regulations_G"))
+```
+
+```{r, cache = TRUE, echo = FALSE, message = FALSE}
+# Organize the Data
+dat_G_USA$date = as.Date(dat_G_USA$date)
+names(dat_G_USA)[9:ncol(dat_G_USA)] = c("Retail&Recreation", "Grocery&Pharmacy", "Parks", "Transit.Stations", "Workplaces", "Residential")
+
+for(i in 1:length(rownames(reg_info_G))){
+  nname = gsub("Â\\s", "", reg_info_G$State.Territory[i])
+  reg_info_G[i, 1] = nname
+}
+#change "No" to NA & notice some entries are not exact dates
+for(i in 1:nrow(reg_info_G)){
+  for(j in 2:ncol(reg_info_G)){
+    if (typeof(reg_info_G[i,j]) != "double"){
+      reg_info_G[i,j] = format(as.Date(as.numeric(reg_info_G[i,j]), origin = "1899-12-30"), format = "%Y-%m-%d")
+      }
+    else if (typeof(reg_info_G[i,j]) == "double"){
+      reg_info_G[i,j] = as.character(reg_info_G[i,j])}
+    }
+}
+reg_info_G = reg_info_G %>%
+  mutate_all(as.character)
+
+colnames(reg_info_G) = as.character(c("State.Territory", "State.of.Emergency", "Stay-at-Home", "Face.Coverings", "Gatherings", "Out-of-State.Travel", "Schools.Closure", "Bar&Sit-Down Restaurants.Closure", "Other.Facilities.Closure"))
+```
+
+
+```{r, cache = TRUE, echo = FALSE, message = FALSE}
+#Plot State-Level Data
+pd = dat_G_USA[c(2:4, 8:ncol(dat_G_USA))] %>%
+  subset(is.na(sub_region_2) == TRUE) %>%
+  select(-sub_region_2) %>% 
+  na.omit()
+
+#use SMA (n = 7)
+pd_wk = pd
+for (i in 4:ncol(pd_wk)){
+  pd_wk[, i] = SMA(pd_wk[, i], n = 7)
+}
+pd_wk = na.omit(pd_wk)
+
+#use SMA (n = 30)
+pd_mth = pd
+for (i in 4:ncol(pd_mth)){
+  pd_mth[, i] = SMA(pd_mth[, i], n = 30)
+}
+pd_mth = na.omit(pd_mth)
+
+#plot
+pd_wk = pd_wk %>%
+  select(names(pd_wk)[3:ncol(pd_wk)]) %>%
+  gather(key = "Places", value = "Value", -date)
+pd_wk$date = as.Date(pd_wk$date)
+
+pd_mth = pd_mth %>%
+  select(names(pd_mth)[3:ncol(pd_mth)]) %>%
+  gather(key = "Places", value = "Value", -date)
+pd_mth$date = as.Date(pd_mth$date)
+
+p1 = ggplot(pd_wk , aes(x = date, y = Value)) + geom_line(aes(color = Places), size = 0.5) + xlab("") + ylab("Mobility (% change)") + ggtitle("Adjusted %Change of Mobility in WYOMING (n = 7)") + theme_minimal()
+
+p1 = p1 + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_x_date(date_labels = "%y %b %d") + geom_hline(yintercept = 0, linetype = "dashed") + geom_hline(yintercept = 0, size = 1, linetype = "dashed", colour = "Red")  
+
+p2 = ggplot(pd_mth, aes(x = date, y = Value)) + geom_line(aes(color = Places), size = 0.5) + xlab("") + ylab("Mobility (% change)") + ggtitle("Adjusted %Change of Mobility in WYOMING (n = 30)") + theme_minimal()
+
+p2 = p2 + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_x_date(date_labels = "%y %b %d") + geom_hline(yintercept = 0, linetype = "dashed") + geom_hline(yintercept = 0, size = 1, linetype = "dashed", colour = "Red")  
+``` 
+
+```{r, cache = TRUE, echo = FALSE, message = FALSE}
+#Add Regulation Timeline to Plot
+reg_info.new = reg_info_G %>%
+  filter(toupper(State.Territory) == "WYOMING") %>%
+  .[,2:ncol(reg_info_G)] %>%
+  mutate(Dates = rownames(.)) %>%
+  gather(key = "Regulation", value = "Dates", -Dates)
+reg_info.new$Dates = as.Date(reg_info.new$Dates)
+
+shadesOfGrey = colorRampPalette(c("grey0", "grey70"))
+
+p3 = p1 + geom_vline(xintercept = reg_info.new$Dates, colour = shadesOfGrey(nrow(reg_info.new)), size = 0.7, linetype = "dashed") + geom_text(data = reg_info.new, mapping = aes(x = Dates, y = 100, label = Regulation), angle = 90, size = 4)
+
+p4 = p2 + geom_vline(xintercept = reg_info.new$Dates, colour = shadesOfGrey(nrow(reg_info.new)), size = 0.7, linetype = "dashed") + geom_text(data = reg_info.new, mapping = aes(x = Dates, y = 100, label = Regulation), angle = 90, size = 4)
+```
+
+```{r, cache = TRUE, echo = FALSE, message = FALSE}
+#plot change in mobility to parks for counties in State Wyoming
+sd = dat_G_USA %>%
+  filter(!is.na(sub_region_2)) %>%
+  select(date, sub_region_2, Parks) %>%
+  na.omit()
+sd$date = as.Date(sd$date)
+colnames(sd) = c("date", "County", "Parks")
+
+#deseasonalize each county
+a = 1
+i = 1
+while (i <= nrow(sd)){
+  j = a #starting index
+  S = sd$County[a]
+  
+  if ((sd$County[i] != S) & isFALSE(S == sd$County[nrow(sd)])){
+    k = i - 1 #end index
+    a = i
+    n = k-j+1
+    if (n >= 7){
+      sd$Parks[j:k] = SMA(sd$Parks[j:k], n = 7)
+      }
+  }
+  else if (S == sd$County[nrow(sd)]){
+    k = nrow(sd)
+    i = k
+    n = k-j+1
+    if (n >= 7){
+      sd$Parks[j:nrow(sd)] = SMA(sd$Parks[j:nrow(sd)], n = 7)
+      }
+  }
+i = i + 1
+}
+
+#plot
+sd = na.omit(sd)
+p5 = ggplot(sd, aes(x = date, y = Parks)) + geom_line(aes(color = County), size = 0.5) + xlab("") + ylab("Mobility (% change)") + ggtitle("Adjusted %Change of Mobility in WYOMING Counties (n = 7)") + theme_minimal()
+
+p6 = p5 + geom_vline(xintercept = reg_info.new$Dates, colour = shadesOfGrey(nrow(reg_info.new)), size = 1, linetype = "dashed") + geom_text(data = reg_info.new, mapping = aes(x = Dates, y = 100, label = Regulation), angle = 90, size = 3) + geom_hline(yintercept = 0, size = 1, linetype = "dashed", colour = "Red")
+```

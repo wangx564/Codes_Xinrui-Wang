@@ -1,0 +1,85 @@
+---
+title: "A"
+author: "Xinrui Wang"
+output:
+  word_document: default
+  html_document: default
+---
+Q4
+```{r,message=FALSE}
+library(tidyverse)
+library(haven)
+a3d = read_dta("hw3data.dta")
+attach(a3d)
+```
+
+(1)
+1)
+```{r, message=FALSE}
+l_probit = glm(y ~ x1 + x2 + x3 + x4 + x5 + x6, family = binomial(link = "probit")) 
+summary(l_probit)
+```
+
+2) From the output, the model implies that $\widehat {P(y = 1|x)} = \Phi(-0.92 +2.01x1 -3.32x2+2.66x3+0.91x4-2.38x5+0.31x6)$ where $\Phi(·)$ is the CDF for standard normal distribution.
+As the p-values on coefficients of all 6 predictors are less than 0.05, therefore, all predictors are statistically significant, meaning that all predictors would influence the probability of whether KFC would open a store.
+
+Precisely, the intercept imples that the probability of KFC opening a store in a place with no shopping mall, McDonald, and subway station nearby & the log of pedestrian flow at the nearest major intersection and log-distance to the nearest KFC distribution center are 0 & 0 population density is $\Phi(-0.9246) = \text{17.76%}$.
+Among all predictors, having a McDonald near the location and the log-distance to the nearest KFC distribution center tend to negatively affect the probability of opening a KFC at that location whereas the other 4 factors positively influence the probability.
+
+(2)
+```{r}
+library(margins)
+margins(l_probit)
+```
+From the output above, see that the average partial effect of x2 and x5 are -0.43 and -0.31 respectively.
+
+APE of x2: -0.43 is the average of changes in the predicted probability of opening a KFC in the location when whether there is already a McDonald nearby changed from no to yes, keeping all other factors unchanged.
+
+APE of x5: -0.31 is the average of changes in the predicted probability of opening a KFC in a location when the log-distance to its nearest KFC distribution center increases by 1 unit, keeping all other factors unchanged.
+
+(3)
+- (1)
+1)
+```{r}
+l_logit = glm(y ~ x1 + x2 + x3 + x4 + x5 + x6, family = binomial(link = "logit")) 
+summary(l_logit)
+```
+
+2) From the output, the model implies that $\widehat {P(y = 1|x)} = \frac{e^{\boldsymbol{X\hat\beta}}}{1+e^{\boldsymbol{X\hat\beta}}}$, where $\boldsymbol{X\hat\beta}}$ = -1.57 + 3.42x1 -5.77x2 + 4.61x3 + 1.54x4 -4.11x5 + 0.53x6.
+
+As the p-values on coefficients of all predictors except for x6 are less than 0.05, therefore, predictors x1, x2, ..., x5 are statistically significant, meaning that these predictors would influence the log odds of whether KFC would open a store.
+
+The p-value on the coefficient of x6 is greater than 0.05, impling that population density of the location may not influence the log odds of whether KFC would open a store in the location. 
+
+Precisely, the intercept imples that the log odds of KFC opening a store in a place with no shopping mall, McDonald, and subway station nearby & the log of pedestrian flow at the nearest major intersection and log-distance to the nearest KFC distribution center are 0 & 0 population density is -1.57.
+
+Among all predictors, having a McDonald near the location and the log-distance to the nearest KFC distribution center tend to negatively affect the log odds of opening a KFC at that location whereas the other 4 factors positively influence the log odds.
+
+- (2)
+```{r}
+margins(l_logit)
+```
+(Results and interpretations are the same as that in (2).)
+
+APE of x2: -0.43 is the average of changes in the predicted probability of opening a KFC in the location when whether there is already a McDonald nearby changed from no to yes, keeping all other factors unchanged.
+
+APE of x5: -0.31 is the average of changes in the predicted probability of opening a KFC in a location when the log-distance to its nearest KFC distribution center increases by 1 unit, keeping all other factors unchanged.
+
+(4)
+```{r}
+bp = c(-0.9246113, 2.0117068, -3.3238607, 2.6569091, 0.9049947,  -2.3806330, 0.3098405)
+nbp = sqrt(sum(bp^2))
+
+bl = c(-1.5652643, 3.4151274, -5.7684044, 4.6094527, 1.5441059, -4.1066032, 0.5345794)
+nbl = sqrt(sum(bl^2))
+
+c = cbind(bp/nbp, bl/nbl)
+colnames(c) = c("Probit", "Logit")
+rownames(c) = c("0","1","2","3","4","5","6")
+round(c, digits = 4)
+```
+1) From the output above, the $\frac{\hat\beta_P}{||\hat\beta_P||}$ and $\frac{\hat\beta_L}{||\hat\beta_L||}$ are not very different.
+
+2) Here, we are calculating the normalized vector of the $\hat\beta's$. The results enable us focus more on the direction, not the magnitude. 
+
+The sign of the coefficients under 2 regressions are the same, meaning that x2 and x5 negatively affect the probablity of opening the KFC at the location whereas the other 4 positively affect the probability.

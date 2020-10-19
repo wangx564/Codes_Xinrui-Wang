@@ -1,0 +1,35 @@
+---
+title: "Tree Diagram for Tree Species"
+author: ''
+date: ''
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = TRUE)
+```
+
+```{r,message=FALSE}
+# Load the packages.
+if (!require(xlsx)) {
+  install.packages("xlsx")
+  library(xlsx)
+}
+
+if (!require(collapsibleTree)) {
+  install.packages("collapsibleTree")
+  library(collapsibleTree)
+}
+```
+
+```{r}
+Timber <- read.xlsx("timber.xlsm", sheetName = "Plot")
+
+hierarchy = c("classification", "species", "list.species")
+
+collapsibleTree(Timber, hierarchy, tooltip = T, zoomable = F, fillByLevel = T, fontSize = 9, nodeSize = "leafCount") #can add collapsed = F to get the full plot directly
+```
+(U.S. FOREST SERVICE. Resource Update FS-169. [Online] 2018. Available from: https://www.fs.fed.us/nrs/pubs/ru/ru_fs169.pdf [Accessed: May 22th 2020])

@@ -1,0 +1,364 @@
+---
+title: "ECO375 Assignment2"
+author: "Xinrui Wang"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+## CH15 Q2
+`stndfnl`: standardized outcome on a final exam
+`atndrte`: percentage of classes attended
+`priGPA`: prior college grade point average
+`ACT`: ACT score
+# (i)
+`dist`: the distance from the students' living quarters to the lecture hall
+- No, if we assume that `the location of residence`dist` is positively correlated to the family wealth (students in richer families can afford to live closer to the lecture hall.) And since family wealth is not included in the model, `dist` is correlated with u due to ommitting variable.
+# (ii)
+`dist` also need to satisfy: `dist` and `atndrte` are correlated (cov(`dist`,`atndrte`) = 0 ), meaning that a change in `dist` affects `atndrte`.
+# (iii)
+Following the hint, as E(u|priGPA, ACT, dist) = 0 and `dist` is correlated with `atndrte`, therefore, as any function of exogenous variables will also be uncorrelated with u, `priGPA`，`dist`, which is correlated with `priGPA`，`atndrte`, is chosen to be its IV.
+## CH15 Q6
+(pic)
+## CH15 Q8
+# (i) 
+The factors would be IQ test scores (indicator of intelligence), parental educational level, hours of study for the test and so on. Basically, all possible factors affecting `score` other than `girlhs` need to be controlled.
+# (ii)
+$score = \beta_0+\beta_1girlhs+\beta_2IQ+\beta_3paredl+\beta_4hour+u$
+# (iii)
+Yes, if we assume that families with more parental support and motivation would send girls to single-sexed rather than mixed schools.
+# (iv)
+Let `numghs` be the number of girls' high schools within a 20-mile radius of a girl's home.
+`numghs` is a valid IV for `girlhs` since
+
+(1) it is positively correlated with `girlhs`,cov(`numghs`, `girlhs`) $\not=$ 0: the greater the number of girls' high schools near the girls' homes, the more likely their families would send them to girls' high schools.
+(2)`numghs` is uncorrelated with the error term, cov(`numghs`, u) = 0: `numghs` is unlikely to be affected by parental support and motivation of one family.
+## (v)
+Since the coefficient of `numghs`  is statistically significant, then we have evidence that `numghs` influences `girlhs`. Since this result is what a variable needs to be an IV, therefore, I would proceed with using `numghs` as IV for `girlhs`. 
+## CH15 C1
+```{r,message = FALSE}
+library(foreign)
+library(AER)
+c1d = read.dta("WAGE2.DTA")
+attach(c1d)
+```
+# (i)
+```{r,echo=TRUE}
+iv1 = ivreg(lwage ~ educ|sibs)
+summary(iv1)
+
+l1 = lm(lwage ~ sibs)
+summary(l1)
+```
+
+1) It can be proved from the output that for the model $log(wage) = \beta_0 +\beta_1edu$, the IV estimate of the return to education is 0.122 (3d.p.).
+2) If I just plugging `sibs` in for `educ` and running an OLS regression, the result (intercept and coefficient of explanatory variable) is differet from using `sibs` as an IV for `educ`.(coefficient for `sibs` is -0.028.)
+3) For the regression of log(wage) on `sibs`, the intercept is 6.861: the expected log(wage) for married working women with no siblings. And the slope is -0.028: if the married working woman has one more sibling, her wage would decrease by 2.8% on average.
+# (ii)
+The smaller the `brthord`, the earlier the child is born and the less siblings he/she has so that more education the child could have, keeping all other factors fixed. Therefore, late-born children enjoy less education compare to their early-born sisters/brothers, implying a negative correlation between `educ` and `brthord`.
+
+```{r,message=FALSE}
+l2 = lm(educ ~ brthord)
+summary(l2)
+```
+From the output, see that the p-value for the `brthord ` coefficient is very small, so that there is evidence against the hypothesis that there is no relationship between `brthord` and `edu`. Therefore, as the coefficient on `brthord` is negative, there is a statistically significant negative correlation.
+
+# (iii)
+```{r}
+iv2 = ivreg(lwage ~ educ|brthord)
+summary(iv2)
+```
+After running the regression: $\widehat{log(wage)} = 5.03 + 0.13*educ$. This model implies that log(`wage`) for married working women with no education is 5.03 on average and one unit increase in `educ` would increase wage by 13% on average, keeping other factors fixed.
+# (iv)
+```{r}
+l3 = lm(educ ~ sibs + brthord)
+summary(l3)
+```
+The reduced form for `educ` is $\widehat{educ} = 14.3 - 0.15*sibs-0.15*brthord$.
+
+The assumptions for `brthord` to be the IV of `educ` is that:
+cov(`brthord`, `educ`) $\not=$ 0 and cov(`brthord`, u) = 0.
+From the output of regressing `educ` on `sibs` and `brthord`, the t-statistic on `brthord` is -2.7, and the p-value on it is less than 0.05, therefore, `brthord` appears to be a valid IV for `educ` if we assume/believe that cov(`brthord`,u) = 0.
+
+# (v)
+```{r}
+iv3 = ivreg(lwage ~ educ + sibs|sibs + brthord)
+summary(iv3)
+
+l4 = lm(lwage ~ educ + sibs)
+summary(l4)
+```
+The fitted model is $\widehat{log(wage)} = 4.94 +0.14*edu+0.002*sibs$ if we use `brthord`as IV for `educ`(The reduced form for `educ` is $\widehat{educ} = 14.3 - 0.15*sibs-0.15*brthord$).
+
+From the output, $SE_{IV}(\hat\beta_{educ})$ = 0.07 and $SE_{IV}(\hat\beta_{sibs})$ = 0.02.
+
+By comparing with the SE of OLS estimators, the SE of IV estimators are larger. ($SE_{OLS}(\hat\beta_{educ})$ = 0.006 and $SE_{IV}(\hat\beta_{sibs})$ = 0.006)
+
+The larger SE is the result of getting a consistent estimator of the return to education when we think `educ` is endogenous. Precisely, the variance of the OLS estimator is $\frac{\sigma^2}{SST_{educ}}$, while that for IV estimators is $\frac{\sigma^2}{SST_{educ}，R^2_{educ,brthord}}$. Because R-squared is always less than 1, the IV variance is always larger than the OLS variance. When $R^2_{educ,brthord}$ is very small(0.04 from (ii)), the IV variance can be much larger than the OLS variance.
+
+#(vi)
+```{r,message = FALSE}
+# need to remove NA and then do the calculation
+detach(c1d)
+c1d2 = na.omit(c1d)
+attach(c1d2)
+l3_2 = lm(educ ~ sibs + brthord)
+cor(l3_2$fitted.values,sibs)
+detach(c1d2)
+```
+The correlation between $\widehat{educ}$ and sibs is -0.933, which is very close to -1, showing that there is a strong negative correlation between the two.
+As variables $\widehat{educ}$ and sibs in the model in part (iv) after using `brthord` as IV for `educ` are correlated, one of the assumptions of linear regression is violated and so that the estimators would be biased. This outcome corresponds to the increase in SE($\beta$) when using IV.
+
+## CH15 C5
+```{r,message=FALSE}
+c5d = read.dta("CARD.DTA")
+attach(c5d)
+```
+
+#(i)
+```{r}
+#obtain reduced form residual
+l1 = lm(educ ~ nearc4 + exper + expersq + black + smsa + south + smsa66 + reg662 + reg663 + reg664 + reg665 + reg666 + reg667 + reg668 + reg669)
+#test
+l2 = lm(lwage ~ educ + exper + expersq + black + smsa + south + smsa66 + reg662 + reg663 + reg664 + reg665 + reg666 + reg667 + reg668 + reg669 + l1$residuals)
+summary(l2)
+```
+From the output above, see that the coefficient on $\hat{v_2}$, the reduced form residuals, is not statistically different from 0 (a large p-value), we conclude that `educ` is exogenous.
+Also, from `Table 15.1`,  the difference between OLS and IV estimators are not statistically significant since the estimate are almost the same except for `educ` and `exper`.
+
+# (ii)
+```{r}
+# add nearc2 as IV for educ
+l3 = lm(educ ~ nearc2 + nearc4 + exper + expersq + black + smsa + south + smsa66 + reg662 + reg663 + reg664 + reg665 + reg666 + reg667 + reg668 + reg669)
+#obtain educ_hat
+educ_h = l3$fitted.values
+
+l4 = lm(lwage ~ educ_h + exper + expersq + black + smsa + south + smsa66 + reg662 + reg663 + reg664 + reg665 + reg666 + reg667 + reg668 + reg669)
+summary(l4)
+```
+After adding `nearc2` as IV for `educ`, its coefficient is 0.157. With no IV, its value is 0.075 (from `Table 15.1`). The coefficient changed a little as the new value with added IV is about 2 times of the one without IV.
+
+# (iii)
+```{r}
+#estimate the structural equation by 2SLS & obtain the 2SLS residuals
+res = l4$residuals
+
+#regress res on all exogenous variables & obtain the R-squared
+l5 = lm(res ~ nearc2 + nearc4 + exper + expersq + black + smsa + south + smsa66 + reg662 + reg663 + reg664 + reg665 + reg666 + reg667 + reg668 + reg669)
+summary(l5)
+
+3010 * 0.0004278 < qchisq(0.05, df = 1)
+
+detach(c5d)
+```
+From the output, the R-squared, $R^2$, equals to 0.0004278.
+Under the null hypothesis that all IVs are uncorrelated with 2SLS residuals, $nR^2\stackrel{a}{\sim} \chi^2_q$ where q = # of IV from outside the model - total # of endogenous explanatory variables. 
+Here, q = 2 - 1 = 1.
+As n = 3010, $R^2$ = 0.0004278 and n$R^2$ is greater than 5% critical value of $\chi^2_1$, we reject $H_0$ and conclude that at least some of the IVs are not exogenous.
+
+## CH16 Q1
+# (i)
+1) If $\alpha_1$ = 0, then $y_1=\beta_1z_1+u_1$ and so the RHS is a function of the exogenous variable $z_1$ and the structural error $u_1$. This is the reduced form for $y_1$.
+
+If $\alpha_2$ = 0, then $y_1=\beta_2z_2+u_2$ and so the RHS is a function of the exogenous variable $z_2$ and the structural error $u_2$. This is also the reduced form for $y_1$.
+
+Obviously, there is reduced form for $y_1$ if both $\alpha_1$ and $\alpha_2$ = 0.
+2) If$\alpha_1 \not= 0$ and $\alpha_2 = 0$, we can plug $y_1 = \beta_2z_2+u_2$ into the first equation and solve for $y_2$. That is, $y_2 = -\frac{\beta_1}{\alpha_1}z_1+\frac{\beta_2}{\alpha_1}z_2-\frac{u_1}{\alpha_1}+\frac{u_2}{\alpha_1}$. As the RHS is a function of exogenous variables ($z_1$ and $z_2$) and the structural error $u_1$ and $u_2$, this is the reduced form for $y_2$.
+
+# (ii)
+1) If$\alpha_1\not= 0$, $\alpha_2 \not= 0$, $\alpha_1 \not=\alpha_2$, to get the reduced form for $y_1$ we need to write rearrange one function for $y_2$ and substitute it into the other one.
+(CONTINUE!!!!!!!!!!!!!!!!!!!)
+
+## CH16 Q5
+# (i)
+$\beta_1$ need to be negative since the percentage of sexually active students who have contracted venereal disease tend to decrease with an increase in percentage of boys using condoms regularly, keeping all other factors unchanged.
+
+# (ii)
+When the `conuse` is jointly determined with the `infrate`, simultaneity (another form of endogeneity of explanatory variables) arises.
+In this question, the two variables are jointly determined because they can also be affected by other factors such as parental education level, level of knowledge about sexual diseases and so on. It is also likely that `infrate` and `conuse` both increase if people believe that using condom prevents venereal disease and a high infection rate arises. (the two variables are affecting each other)
+
+# (iii)
+(pic)
+
+# (iv)
+1) To estimate $\beta_1$ using `condis` as IV for `conuse`, we first run a regression of `conuse` on `condis` and obtain values of $\widehat{conuse}$. Then, we run another regression of `infrate` on $\widehat{conuse}$ and the other 3 independent variables. The estimate of $\beta's$ can be obtained in the output.
+
+2) To use `condis` as IV for the explanatory variables, it must satisfy that cov(`condis`, $u_1$) = 0 and cov(`condis`, explanatory variables in `infrate` equation) $\not=$ 0.
+
+## CH16 C1
+```{r, message=FALSE}
+c1dat = read.dta("SMOKE.DTA")
+attach(c1dat)
+```
+
+# (i)
+When the number of cigarettes the person smoke per day increases by 1 unit one average, `income` will change by 100$\beta_1$%, keeping all other factors unchanged.
+
+# (ii)
+$\gamma_5$ is expected to be negative since an increase in price tend to decrease quantity demanded, ceteris paribus.
+$\gamma_6$ is expected to be negative since people in states with restaurant smoking restrictions (`restaur` = 1) tend to smoke less than those people in states without restaurant smoking restrictions (`restaur` = 0), ceteris paribus.
+
+# (iii)
+There are 2 equations in (i) and (ii). For the first one to be identified there must be at least one exogenous variable excluded/not in from the log(`income`) equation that appears with a nonzero coefficient in the `cigs` equation. In our example, $\gamma_5 \not= 0$ or $\gamma_6\not= 0$ is required.
+
+
+# (iv)
+```{r}
+l1 = lm(lincome ~ cigs + educ + age + agesq)
+summary(l1)
+```
+The estimated income equation is $log(income) = 7.8 + 0.002*cigs + 0.06*educ + 0.058*age -0.0006*age^2$
+From the output, $\widehat\beta_1$ is 0.001731. This means that when `cigs` increases by 1 unit, the person's income would increase by 0.1731%. Meanwhile, p-value on `cigs` is large, providing no evidence against that `cigs` has no influence on log(`income`).
+
+# (v)
+```{r}
+l2 = lm(cigs ~ educ + age + agesq + lcigpric + restaurn)
+summary(l2)
+```
+log(`cigpric`) is statistically insignificant as p-value on it is larger than 0.05 whereas `restaurn` is significant in the redueced form since the p-value on `restaurn` is small than 0.05.
+
+# (vi)
+```{r}
+cigs_h = l2$fitted.values
+
+l3 = lm(lincome ~ cigs_h + educ + age + agesq)
+summary(l3)
+
+detach(c1dat)
+```
+From the output, $\widehat\beta_{IV}$ is -0.0421257, meaning that each additional cigarette someone smokes per day on average lowers predicted income by about 4.2%, ceteris paribus. Whereas $\widehat\beta_{OLS}$ is 0.001731. See that there is a change in sign of $\widehat\beta_1$.Also, the magnitude/effect of `cigs` on log(`income`) is greater after introducing IV since |$\widehat\beta_{IV}$| is about 24 times of the value of |$\widehat\beta_{OLS}$|. Besides, the coefficient on `cigs`(with IV) is significant at 5% significant level.
+
+# (vii)
+Cigarette prices and restaurant smoking restrictions can be considered endogenous in the `income` equation if the unmeasured factor `region` is included in $u_1$. Therefore, both `lcigpric` and `restaurn` would be correlated with the error term since cigarette price level and whether restaurants impose smoking restrictions depend on the place the person lives.
+
+## CH17 Q2
+For who spent 10 hours per week studying:
+$\hat{P} = \Lambda(-1.17 + 0.24*3 + 0.00058 * 1200 + 0.073*10) =\Lambda(0.976)$ 「 0.726
+For who spent 5 hours per week studying:
+$\hat{P} = \Lambda(-1.17 + 0.24*3 + 0.00058 * 1200 + 0.073*5) =\Lambda(0.611)$ 「 0.648
+Therefore, the difference in estimated probabilities is 0.726 - 0.648 = 0.078.
+
+## CH17 Q3
+(pic)
+## CH17 C1
+```{r}
+dat = read.dta("PNTSPRD.dta")
+attach(dat)
+```
+# (i) 
+If the spread is 0, then vegas expects both teams are equally likely to win. Thus, we should expect the $\beta_0$ to be 0.5. 
+
+# (ii)
+1)
+```{r}
+#OLS
+l_ols = lm(favwin ~ spread)
+summary(l_ols)
+```
+2) (using usual standard errors) For the hypothesis test: test statistic for F test = $(\frac{0.576949 - 0.5}{0.028235})^2 「 7.426$, which gives a p-value of 0.0066. At 5% level of significance, we reject the $H_0$ that the constant term is equal to 0.5. This indicates a linear model is mis-specified. 
+
+3)(using heteroskedasticity-robust standard errors)
+```{r}
+summary(l_ols, robust=TRUE)
+```
+Using similar method, I got a p-value close to 0.0154. At 5% level of significance, we still reject the $H_0$ that the constant term equals to 0.5. This indicates a linear model is mis-specified. 
+
+# (iii)
+
+1) From output in (ii), the p-value on `spread` is very small (close to zero), implying `spread` is statistically significant.
+2) when spread  = 10, $\widehat{P(favwin=1|spread)} 「 0.577+0.019*10 =  0.767$. The estimated probability that the favored team wins when spread = 10 is 76.7%.
+
+# (iv)
+```{r}
+l_probit = glm(favwin ~ spread, family = binomial(link = "probit"))
+summary(l_probit)
+```
+If the spread is 0, we would expect there to be a 50-50 chance that the favoured team wins. Therefore, to get a probability of favwin = 1 equal to 0.5, we need the CDF of the normal distribution to be evaluated at 0 (standard normal distribution is symmetric).
+
+From the output,the p-value on intercept 0.918. At 5% level of significance, we fail to reject the $H_0$ that our intercept is zero. Therefore, the probit model is more appropriate to use. 
+
+# (v)
+1) When spread = 10, $\widehat{P(favwin=1|spread)} = \Phi(-0.01059+10* 0.09246) 「 0.8196$.
+
+2) The LPM gives an estimate of 0.767, which is smaller than the estimate under probit model (0.8196).
+
+# (vi)
+```{r}
+l_pro = glm(favwin ~ spread + favhome + fav25 + und25, family = binomial(link = "probit"))
+
+summary(l_pro)
+
+```
+1) LRT 
+```{r}
+lmtest::lrtest(l_probit, l_pro)
+
+```
+(From the output, df =3 in the chi-square distribution.)
+
+2) See that the p-value for the likelihood ratio test is greater than 0.05. So, we fail to reject the null hypothesis that the simple model (with only one explanatory vairable `spread`) explains the data as good as the complex one, which means `favhome`, `fav25`, `und25` are jointly insignificant and `spread` indeed incorporated all observable information prior to a game.
+
+## CH17 C13
+```{r, message=FALSE}
+detach(dat)
+c13d = read.dta("HTV.DTA")
+attach(c13d)
+```
+
+# (i)
+1)
+```{r}
+l_1 = lm(lwage ~ educ + abil + exper + nc + west + south + urban)
+summary(l_1)
+```
+The model is $\widehat{log(wage)} = 0.399 + 0.104*educ + 0.056*abil + 0.045*exper - 0.14*nc -0.128*west -0.123*south + 0.227*urban$.
+
+2) For one 1 increase in `educ`, the `wage` is expected to increase by 10.4%, keeping all other factors unchanged.
+
+3) Standard error on `educ` is  0.009689.
+
+# (ii)
+```{r, message=FALSE}
+# new dataset with people has educ < 16
+detach(c13d)
+c13d_2 = c13d[which(c13d$educ < 16), ]
+
+attach(c13d_2)
+
+l_2 = lm(lwage ~ educ + abil + exper + nc + west + south + urban)
+summary(l_2)
+
+
+(nrow(c13d) - nrow(c13d_2))/nrow(c13d)
+detach(c13d_2)
+```
+
+1) The new model is $\widehat{log(wage)} = 0.279 + 0.118*educ + 0.049*abil + 0.041*exper - 0.141*nc -0.136*west -0.112*south + 0.22*urban$.
+
+2) There are 1064 observations with `educ` < 16, about 13.5% of the sample is lost.
+
+3) One year increase in schooling for people with `educ`< 16 would increase the wage by 11.8% on average, ceteris paribus. This return is greater than that in (i). This implies education is particularly important for people with `educ`< 16.
+
+# (iii)
+```{r, message=FALSE}
+# another new dataset with people has wage < 20
+
+c13d_3 = c13d[which(c13d$wage < 20), ]
+attach(c13d_3)
+
+l_3 = lm(lwage ~ educ + abil + exper + nc + west + south + urban)
+summary(l_3)
+```
+
+From the output, the coefficient on `educ` is 0.057923. This means that for people earn less than $20 an hour, taking an additional year of education would increase wage by 5.8% on average, ceteris paribus. Here, the return is less than that in part (i) and (ii).
+The p-value on `educ` is small (close to zero), providing evidence that `educ` has an impact on wages.
+
+# (iv)
+```{r, message=FALSE}
+library(truncreg)
+l_4 = truncreg(lwage ~ educ + abil + exper + nc + west + south + urban, point = log(20), direction = "right")
+summary(l_4)
+
+cbind(confint(l_1, level = 0.95)[2,], confint(l_4, level = 0.95)[2,])
+```
+

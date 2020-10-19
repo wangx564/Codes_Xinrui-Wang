@@ -1,0 +1,87 @@
+---
+title: 'STA302H1S / 1001 HS Autumn 2019 Assignment # 1'
+author: "Xinrui Wang"
+Student Number: '1003830063'
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+Group Code: ' I25'
+---
+
+Q1a
+
+1)Equation: $\text{average season rating}_i $ = $d_{1990}*\mu_{1990}+d_{2000}*\mu_{2000}+d_{2010}*\mu_{2010}+\epsilon_i$
+where di's are dummy variables for decade i
+2) Assumption for ANOVA:
+1. Errors are independent (observations are independent) 
+2. Errors are normally distributed with E[$\epsilon_i$] = 0
+3. Constant variance (homoscedasticity), var[$\epsilon_i$] = $\sigma^2$
+
+Q1b
+$H_0$: $\mu_{1990} = \mu_{2000} = \mu_{2010}$, the average season rating for crime shows is the same decade to decade
+$H_a$: at least one of the average season ratings for crime shows is different from the others
+
+Q1c
+```{r, echo=TRUE, eval=TRUE}
+library(tidyverse)
+
+# load crimeshow data 
+crime_show_data <- readRDS("crime_show_ratings.RDS")
+# Side by side box plots 
+crime_show_data %>% ggplot(aes(x = decade, y = season_rating)) + geom_boxplot() + ggtitle("Boxplots of average rating by decade for crime TV shows")
+
+# Facetted histograms 
+crime_show_data %>% ggplot(aes(x = season_rating)) + geom_histogram(bins=20) + facet_wrap(~decade) + ggtitle("Histograms of average rating by decade for crime TV shows")
+```
+
+1)I prefer the boxplot since it is more straightforward: mean and the values between 25th and 75th percentile can be easily seen(shown by the lines and the box) and compared across decades
+
+2)I would improve it by investigating the outliers. If they are anomalous, I would take them out and create a boxplot without outliers. 
+
+3) No. The difference is small as average ratings of 3 decades are all around 8 from the boxplot.
+
+Q1d
+```{r}
+attach(crime_show_data)
+
+a <- aov(season_rating ~ decade, data = crime_show_data)
+
+summary(a)
+```
+From the ANOVA, the p-value under the null hypothesis test is 0.238 which is larger than 0.05. This does not provide evidence against $H_0$. Therefore, the sample supports $H_0$: average season ratings for crime shows are the same decade to decade.
+
+Q1e
+```{r}
+plot(a, 1)
+plot(a, 2)
+```
+The first plot shows the residuals of the model against the fitted values and the second plot shows the standardized residuals against a theoretical normal distribution of residuals. 
+
+From the first plot: no random pattern is seen and points are not centered around 0 (E($\epsilon_i$),indicated by the red line). Thus, the assumption of E($\epsilon_i$) = 0 is violated.
+
+From the second plot: a staright line can be fitted into the points/the points clearly form a straight line, thus, the assumption of $\epsilon_i$ follows a normal distribution is satisfied.
+
+```{r}
+var = crime_show_data %>% 
+  group_by(decade) %>% 
+  summarise(var_rating = sd(season_rating)^2)
+var
+
+max(var[,2])/min(var[,2]) < 3
+```
+Here, $\frac{S_{max}^2}{S_{min}^2 }$ < 3. Therefore, the constant variance assumption of $\epsilon_i$ is satisfied.
+
+1f
+```{r}
+l = lm(season_rating ~ decade)
+summary(l)
+
+# to get mean season rating of each decade
+c(lm(season_rating ~ 1, filter(crime_show_data, decade == 1990))$coef, 
+  lm(season_rating ~ 1, filter(crime_show_data, decade == 2000))$coef, 
+  lm(season_rating ~ 1, filter(crime_show_data, decade == 2010))$coef)
+```
+The intercepts are exactly the mean seanson rating for each decade. For 1990s, mean = intercept, 7.9222. For the next decade, mean = intercept + 0.1368. Then, the next decade, mean = intercept + 0.1938.
+That is, $\hat\mu_{1990s}$ = 7.922151, $\hat\mu_{2000s}$ = 8.058942, $\hat\mu_{2010s}$ = 8.115985.

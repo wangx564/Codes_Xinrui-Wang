@@ -1,0 +1,77 @@
+---
+title: "USA Mobility (Google)"
+author: ''
+date: ''
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+```{r,message = FALSE, cache = TRUE, echo = FALSE}
+# Load the packages
+packages = c("xlsx", "tidyverse", "viridis", "forecast", "fpp", "ggfortify", "zoo", "xts", "forecast", "TTR", "gridExtra")
+
+#install.packages(packages)
+lapply(packages, library, character.only = TRUE)
+```
+
+```{r, cache = TRUE, echo = FALSE}
+dat_G_USA = as.data.frame(read.xlsx("Mobility_G.xlsx", sheetName = "Sample_Google_CANADA")) #CA
+
+dat_G_USA$date = as.Date(dat_G_USA$date)
+names(dat_G_USA)[8:ncol(dat_G_USA)] = c("Retail&Recreation", "Grocery&Pharmacy", "Parks", "Transit.Stations", "Workplaces", "Residential")
+
+
+```
+
+```{r,cache = TRUE, echo = FALSE, message = FALSE}
+# compare with National Average Flow
+# to plot for only one type:
+p1 = ggplot(data = dat_G_USA, aes(x = date, y = Transit.Stations)) + geom_line(color = "#00AFBB", size = 1) + xlab("") + ylab("Mobility (% change)") + ggtitle("Change of Transit Mobility in Canada") + theme_minimal() 
+
+p1 + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_x_date(date_labels = "%y %b %d") + geom_hline(yintercept = 0, linetype = "dashed")
+
+# to plot for over one type:
+df = dat_G_USA %>%
+  filter(is.na(sub_region_1)) %>%
+  select(names(dat_G_USA)[7:ncol(dat_G_USA)][-5]) %>%
+  gather(key = "Places", value = "value", -date)
+
+p2 = ggplot(df, aes(x = date, y = value)) + geom_line(aes(color = Places), size = 0.5) + xlab("") + ylab("Mobility (% change)") + ggtitle("Change of Mobility within Canada") + theme_minimal()
+
+p2 + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_x_date(date_labels = "%y %b %d") + geom_hline(yintercept = 0, linetype = "dashed") 
+``` 
+
+```{r, cache = TRUE, echo = FALSE, message = FALSE}
+# Compare Flows across Provinces
+#only transit
+sdat1 = dat_G_USA %>%
+  filter(!is.na(sub_region_1)) %>%
+  select(date, sub_region_1, Transit.Stations) %>%
+  rename(Provinces = sub_region_1) 
+
+p = ggplot(data = sdat1, aes(x = date, y = Transit.Stations)) + geom_line(aes(color = Provinces), size = 0.4) + xlab("") + ylab("Mobility (% change)") + ggtitle("Change of Transit Mobility in All Provinces") + theme_minimal()
+p + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_x_date(date_labels = "%y %b %d") + geom_hline(yintercept = 0, linetype = "dashed") 
+
+# write a for loop: rearrange data set -> plot
+# plot for over one type
+sdat2 = dat_G_USA %>%
+  filter(!is.na(sub_region_1)) %>%
+  select(names(dat_G_USA)[7:ncol(dat_G_USA)][-5]) %>%
+  gather(key = "Places", value = "value", -date)
+
+num = unique(sdat1$Provinces)
+j = 1
+plist = list()
+for (i in 1:length(num)){
+region = num[i]
+
+pp = ggplot(sdat2, aes(x = date, y = value)) + geom_line(aes(color = Places), size = 0.5) +  xlab("") + ylab("Mobility (% change)") + ggtitle(paste("Change of Mobility in Province", region)) + theme_minimal()
+p3 = pp + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_x_date(date_labels = "%y %b %d") + geom_hline(yintercept = 0, linetype = "dashed")
+
+plist[[j]] = p3
+j = j + 1
+}
+
+do.call("grid.arrange", c(plist, ncol = floor(sqrt(length(num)))))
+```

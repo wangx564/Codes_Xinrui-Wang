@@ -1,0 +1,524 @@
+---
+title: "STA130 Hazardous Driving Analysis"
+author: Michael D'Souza, Yuanyuan Yang, Xinrui Wang, Sarah Ripley, Diya Kamath", 101I,
+  I2
+subtitle: East coasts gem Newfoundland and Labrdaor has the most driving hazards in
+  Canada
+output:
+  beamer_presentation: default
+  ioslides_presentation: default
+  widescreen: yes
+---
+```{r, echo = FALSE}
+file_url <- "https://raw.githubusercontent.com/ntaback/UofT_STA130/master/project/hazardousdriving.csv"
+hazarddat <- read.csv(file_url)
+```
+
+## Introduction
+- **Where is the data about?**
+Geotab is a  GPS device that allows us to measure data that cars collect. The data collected measures variables that concern vehicular use. There were 21 variables, some of  these variables were: the number of incidents, location, and severity score, among other things.
+
+## Objectives
+- Our group has two main objectives in our analysis. 
+- **First**, we want to determine which province has the most hazardous driving, based on our definition. 
+- **Second**, we want to determine if the difference we observed between the most hazardous province and the each of the other provinces is statistically significant. 
+**What does our group consider as hazardous?** 
+A severity score whose average (Median) is above the median severity score for all of Canada is considered hazardous.
+
+## Statistical Methods
+**Hazardous Driving Definition**
+- $Any count of harsh breaking incidents and accident-level incidents for every 100 units of traffic flow.  
+
+**Variables Used**
+- $Country
+- $State
+- $SeverityScore
+- $Avg_SeverityScore
+
+---
+
+**Methods**
+To determine which province has the most driving hazards, our group will compare the median severity scores for each province. We created a box plot and bar plot using data wrangling. First, we had to create a data frame with the variable Country, **filtered** to equal "Canada". Then using the function **ggplot**, we created a box plot with the variable State graphed on the x-axis, and SeverityScore graphed on the y-axis. To make extreme values less extreme, we used a logarithmic transformation on the severity scores.  
+The boxplot was created by constructing a new data frame that was **grouped_by** state and the values for the median severity scores were **summarized**. Using ggplot, states was graphed on the x-axis and Avg_SeverityScore were graphed on the y-axis.
+
+## Results
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=3}
+library(tidyverse)
+data1 <- hazarddat %>% filter(hazarddat$Country== "Canada")
+ggplot(data=data1, aes(x=ISO_3166_2, y=SeverityScore)) + geom_boxplot() + theme_bw() + labs(x="State", y="Median Severity Score")
+data1 <- hazarddat %>% 
+  filter(hazarddat$Country== "Canada") %>% mutate(log_SeverityScore = log(SeverityScore)) 
+```
+
+---
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=3}
+#boxplot with red line
+box_plot <- ggplot(data=data1, aes(x=ISO_3166_2, y=log_SeverityScore)) + geom_boxplot() + theme_bw() +  labs(x="State", y="log_Median Severity Score") + geom_hline(yintercept = log(median(data1$SeverityScore)), color="red")
+box_plot
+
+#mutate sum of incidents and the log of median severityscore
+table_data <- data1 %>% group_by(State) %>% summarize(Avg_SeverityScore = median(SeverityScore),Sum_NumberIncidents = sum(NumberIncidents), Avg_logSeverityScore = median(log_SeverityScore), count=n())
+```
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=3}
+#adding log of severityscore, median of the log of severityscore and the median of severityscore
+data1 <- hazarddat %>% filter(hazarddat$Country== "Canada") %>% mutate(log_SeverityScore = log(SeverityScore), Avg_SeverityScore = median(SeverityScore), Avg_logSeverityScore = median(log_SeverityScore))
+
+table_data <- data1 %>% group_by(State, ISO_3166_2) %>% summarize(Avg_SeverityScore = median(SeverityScore),Sum_NumberIncidents = sum(NumberIncidents), Avg_logSeverityScore = median(log_SeverityScore), count=n())
+#bar plot showing the avg_severity score of different states compared to the median of that of all states
+ggplot(table_data, aes(x=ISO_3166_2, y=Avg_SeverityScore)) + geom_col() + geom_hline(yintercept = median(table_data$Avg_SeverityScore), color="red") + labs(x="State")
+```
+
+## Statistical Methods
+- We use hypothesis test to figure out the relationship between Newfoundland and other provinces. We choose the median severity score of NL as a cut-off point. The null hypothesis is the proportion of severity score that above the cut-off point in NL is same as the proportion of severity score that above the cut-off point in other provinces. The alternative hypothesis is that they are not equal. To run a hypothesis test, we firstly calculate a test statistic based on the observed data, then simulate and shuffle 1000 times to get the possible p-differences. 
+
+## Results
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=3}
+provinces <- c("Alberta", "British Columbia", "Manitoba", "New Brunswick", "Nova Scotia", "Ontario", "Prince Edward Island", "Quebec", "Saskatchewan" )
+k= 1
+set.seed(130)
+
+repetitions <- 1000
+simulated_stats <- rep(NA, repetitions)
+data1 <- hazarddat %>% 
+  filter(hazarddat$Country== "Canada") 
+
+data_NL <- data1 %>% filter(data1$State == "Newfoundland and Labrador")
+
+
+n_NL <- data1 %>% filter(State=="Newfoundland and Labrador")%>%summarise(n())
+n_notNL <- data1 %>% filter(State == provinces[k])%>%summarise(n())
+med <- median(data_NL$SeverityScore)
+
+below_NL <- data1 %>% filter(SeverityScore >= med & State=="Newfoundland and labrador") %>% summarize(n()) 
+
+below_notNL <- data1 %>%filter(SeverityScore >= med & State==provinces[k]) %>% summarize(n())
+
+
+test_stat <- as.numeric(below_NL/n_NL - below_notNL/n_notNL) 
+data2 <- data1 %>% filter(State=="Newfoundland and Labrador" | State== provinces[k])
+for (i in 1:repetitions)
+{
+  sim <-data2 %>% mutate(State = sample(State))
+  below_NL <- sim %>%
+    filter(SeverityScore >= med &
+             State=="Newfoundland and Labrador")%>% summarize(n())
+  below_notNL <- sim %>%
+    filter(SeverityScore >= med &
+             State==provinces[k]) %>% summarize(n())
+  p_diff <- (below_NL/n_NL - below_notNL/n_notNL)
+  simulated_stats[i] <- as.numeric(p_diff)
+}
+sim <- data_frame(p_diff=simulated_stats)
+
+extreme_count <- sim %>%   filter(p_diff >= abs(test_stat) | p_diff <= -1*abs(test_stat)) %>%
+  summarise(n()) 
+
+p_value1 <- as.numeric(extreme_count)/(repetitions) 
+
+
+k= 2
+
+set.seed(130)
+
+repetitions <- 1000
+simulated_stats <- rep(NA, repetitions)
+
+data1 <- hazarddat %>% 
+  filter(hazarddat$Country== "Canada") 
+
+data_NL <- data1 %>% filter(data1$State == "Newfoundland and Labrador")
+
+
+n_NL <- data1 %>% filter(State=="Newfoundland and Labrador")%>%summarise(n())
+
+n_notNL <- data1 %>% filter(State == provinces[k])%>%summarise(n())
+
+med <- median(data_NL$SeverityScore)
+
+below_NL <- data1 %>% filter(SeverityScore >= med & State=="Newfoundland and labrador") %>% summarize(n()) 
+
+below_notNL <- data1 %>%filter(SeverityScore >= med & State==provinces[k]) %>% summarize(n())
+
+
+test_stat <- as.numeric(below_NL/n_NL - below_notNL/n_notNL) 
+data2 <- data1 %>% filter(State=="Newfoundland and Labrador" | State== provinces[k])
+for (i in 1:repetitions)
+{
+  sim <-data2 %>% mutate(State = sample(State))
+  below_NL <- sim %>%
+    filter(SeverityScore >= med &
+             State=="Newfoundland and Labrador")%>% summarize(n())
+  below_notNL <- sim %>%
+    filter(SeverityScore >= med &
+             State==provinces[k]) %>% summarize(n())
+  p_diff <- (below_NL/n_NL - below_notNL/n_notNL)
+  simulated_stats[i] <- as.numeric(p_diff)
+}
+sim <- data_frame(p_diff=simulated_stats)
+
+extreme_count <- sim %>%   filter(p_diff >= abs(test_stat) | p_diff <= -1*abs(test_stat)) %>%
+  summarise(n()) 
+
+p_value2 <- as.numeric(extreme_count)/(repetitions) 
+
+k= 3
+
+set.seed(130)
+
+repetitions <- 1000
+simulated_stats <- rep(NA, repetitions)
+
+data1 <- hazarddat %>% 
+  filter(hazarddat$Country== "Canada") 
+
+data_NL <- data1 %>% filter(data1$State == "Newfoundland and Labrador")
+
+
+n_NL <- data1 %>% filter(State=="Newfoundland and Labrador")%>%summarise(n())
+
+n_notNL <- data1 %>% filter(State == provinces[k])%>%summarise(n())
+
+med <- median(data_NL$SeverityScore)
+
+below_NL <- data1 %>% filter(SeverityScore >= med & State=="Newfoundland and labrador") %>% summarize(n()) 
+
+below_notNL <- data1 %>%filter(SeverityScore >= med & State==provinces[k]) %>% summarize(n())
+
+
+test_stat <- as.numeric(below_NL/n_NL - below_notNL/n_notNL) 
+data2 <- data1 %>% filter(State=="Newfoundland and Labrador" | State== provinces[k])
+for (i in 1:repetitions)
+{
+  sim <-data2 %>% mutate(State = sample(State))
+  below_NL <- sim %>%
+    filter(SeverityScore >= med &
+             State=="Newfoundland and Labrador")%>% summarize(n())
+  below_notNL <- sim %>%
+    filter(SeverityScore >= med &
+             State==provinces[k]) %>% summarize(n())
+  p_diff <- (below_NL/n_NL - below_notNL/n_notNL)
+  simulated_stats[i] <- as.numeric(p_diff)
+}
+sim <- data_frame(p_diff=simulated_stats)
+
+extreme_count <- sim %>%   filter(p_diff >= abs(test_stat) | p_diff <= -1*abs(test_stat)) %>%
+  summarise(n()) 
+
+p_value3 <- as.numeric(extreme_count)/(repetitions) 
+
+
+k= 4
+
+set.seed(130)
+
+repetitions <- 1000
+simulated_stats <- rep(NA, repetitions)
+
+data1 <- hazarddat %>% 
+  filter(hazarddat$Country== "Canada") 
+
+data_NL <- data1 %>% filter(data1$State == "Newfoundland and Labrador")
+
+
+n_NL <- data1 %>% filter(State=="Newfoundland and Labrador")%>%summarise(n())
+
+n_notNL <- data1 %>% filter(State == provinces[k])%>%summarise(n())
+
+med <- median(data_NL$SeverityScore)
+
+below_NL <- data1 %>% filter(SeverityScore >= med & State=="Newfoundland and labrador") %>% summarize(n()) 
+
+below_notNL <- data1 %>%filter(SeverityScore >= med & State==provinces[k]) %>% summarize(n())
+
+
+test_stat <- as.numeric(below_NL/n_NL - below_notNL/n_notNL) 
+data2 <- data1 %>% filter(State=="Newfoundland and Labrador" | State== provinces[k])
+for (i in 1:repetitions)
+{
+  sim <-data2 %>% mutate(State = sample(State))
+  below_NL <- sim %>%
+    filter(SeverityScore >= med &
+             State=="Newfoundland and Labrador")%>% summarize(n())
+  below_notNL <- sim %>%
+    filter(SeverityScore >= med &
+             State==provinces[k]) %>% summarize(n())
+  p_diff <- (below_NL/n_NL - below_notNL/n_notNL)
+  simulated_stats[i] <- as.numeric(p_diff)
+}
+sim <- data_frame(p_diff=simulated_stats)
+
+extreme_count <- sim %>%   filter(p_diff >= abs(test_stat) | p_diff <= -1*abs(test_stat)) %>%
+  summarise(n()) 
+
+p_value4 <- as.numeric(extreme_count)/(repetitions) 
+
+
+k= 5
+
+set.seed(130)
+
+repetitions <- 1000
+simulated_stats <- rep(NA, repetitions)
+
+data1 <- hazarddat %>% 
+  filter(hazarddat$Country== "Canada") 
+
+data_NL <- data1 %>% filter(data1$State == "Newfoundland and Labrador")
+
+
+n_NL <- data1 %>% filter(State=="Newfoundland and Labrador")%>%summarise(n())
+
+n_notNL <- data1 %>% filter(State == provinces[k])%>%summarise(n())
+
+med <- median(data_NL$SeverityScore)
+
+below_NL <- data1 %>% filter(SeverityScore >= med & State=="Newfoundland and labrador") %>% summarize(n()) 
+
+below_notNL <- data1 %>%filter(SeverityScore >= med & State==provinces[k]) %>% summarize(n())
+
+
+test_stat <- as.numeric(below_NL/n_NL - below_notNL/n_notNL) 
+data2 <- data1 %>% filter(State=="Newfoundland and Labrador" | State== provinces[k])
+for (i in 1:repetitions)
+{
+  sim <-data2 %>% mutate(State = sample(State))
+  below_NL <- sim %>%
+    filter(SeverityScore >= med &
+             State=="Newfoundland and Labrador")%>% summarize(n())
+  below_notNL <- sim %>%
+    filter(SeverityScore >= med &
+             State==provinces[k]) %>% summarize(n())
+  p_diff <- (below_NL/n_NL - below_notNL/n_notNL)
+  simulated_stats[i] <- as.numeric(p_diff)
+}
+sim <- data_frame(p_diff=simulated_stats)
+
+extreme_count <- sim %>%   filter(p_diff >= abs(test_stat) | p_diff <= -1*abs(test_stat)) %>%
+  summarise(n()) 
+
+p_value5 <- as.numeric(extreme_count)/(repetitions) 
+
+
+k= 6
+
+set.seed(130)
+
+repetitions <- 1000
+simulated_stats <- rep(NA, repetitions)
+
+data1 <- hazarddat %>% 
+  filter(hazarddat$Country== "Canada") 
+
+data_NL <- data1 %>% filter(data1$State == "Newfoundland and Labrador")
+
+
+n_NL <- data1 %>% filter(State=="Newfoundland and Labrador")%>%summarise(n())
+
+n_notNL <- data1 %>% filter(State == provinces[k])%>%summarise(n())
+
+med <- median(data_NL$SeverityScore)
+
+below_NL <- data1 %>% filter(SeverityScore >= med & State=="Newfoundland and labrador") %>% summarize(n()) 
+
+below_notNL <- data1 %>%filter(SeverityScore >= med & State==provinces[k]) %>% summarize(n())
+
+
+test_stat <- as.numeric(below_NL/n_NL - below_notNL/n_notNL) 
+data2 <- data1 %>% filter(State=="Newfoundland and Labrador" | State== provinces[k])
+for (i in 1:repetitions)
+{
+  sim <-data2 %>% mutate(State = sample(State))
+  below_NL <- sim %>%
+    filter(SeverityScore >= med &
+             State=="Newfoundland and Labrador")%>% summarize(n())
+  below_notNL <- sim %>%
+    filter(SeverityScore >= med &
+             State==provinces[k]) %>% summarize(n())
+  p_diff <- (below_NL/n_NL - below_notNL/n_notNL)
+  simulated_stats[i] <- as.numeric(p_diff)
+}
+sim <- data_frame(p_diff=simulated_stats)
+
+extreme_count <- sim %>%   filter(p_diff >= abs(test_stat) | p_diff <= -1*abs(test_stat)) %>%
+  summarise(n()) 
+
+p_value6 <- as.numeric(extreme_count)/(repetitions) 
+
+
+k= 7
+
+set.seed(130)
+
+repetitions <- 1000
+simulated_stats <- rep(NA, repetitions)
+
+data1 <- hazarddat %>% 
+  filter(hazarddat$Country== "Canada") 
+
+data_NL <- data1 %>% filter(data1$State == "Newfoundland and Labrador")
+
+
+n_NL <- data1 %>% filter(State=="Newfoundland and Labrador")%>%summarise(n())
+
+n_notNL <- data1 %>% filter(State == provinces[k])%>%summarise(n())
+
+med <- median(data_NL$SeverityScore)
+
+below_NL <- data1 %>% filter(SeverityScore >= med & State=="Newfoundland and labrador") %>% summarize(n()) 
+
+below_notNL <- data1 %>%filter(SeverityScore >= med & State==provinces[k]) %>% summarize(n())
+
+
+test_stat <- as.numeric(below_NL/n_NL - below_notNL/n_notNL) 
+data2 <- data1 %>% filter(State=="Newfoundland and Labrador" | State== provinces[k])
+for (i in 1:repetitions)
+{
+  sim <-data2 %>% mutate(State = sample(State))
+  below_NL <- sim %>%
+    filter(SeverityScore >= med &
+             State=="Newfoundland and Labrador")%>% summarize(n())
+  below_notNL <- sim %>%
+    filter(SeverityScore >= med &
+             State==provinces[k]) %>% summarize(n())
+  p_diff <- (below_NL/n_NL - below_notNL/n_notNL)
+  simulated_stats[i] <- as.numeric(p_diff)
+}
+sim <- data_frame(p_diff=simulated_stats)
+
+extreme_count <- sim %>%   filter(p_diff >= abs(test_stat) | p_diff <= -1*abs(test_stat)) %>%
+  summarise(n()) 
+
+p_value7 <- as.numeric(extreme_count)/(repetitions) 
+
+
+k= 8
+
+set.seed(130)
+
+repetitions <- 1000
+simulated_stats <- rep(NA, repetitions)
+
+data1 <- hazarddat %>% 
+  filter(hazarddat$Country== "Canada") 
+
+data_NL <- data1 %>% filter(data1$State == "Newfoundland and Labrador")
+
+
+n_NL <- data1 %>% filter(State=="Newfoundland and Labrador")%>%summarise(n())
+
+n_notNL <- data1 %>% filter(State == provinces[k])%>%summarise(n())
+
+med <- median(data_NL$SeverityScore)
+
+below_NL <- data1 %>% filter(SeverityScore >= med & State=="Newfoundland and labrador") %>% summarize(n()) 
+
+below_notNL <- data1 %>%filter(SeverityScore >= med & State==provinces[k]) %>% summarize(n())
+
+
+test_stat <- as.numeric(below_NL/n_NL - below_notNL/n_notNL) 
+data2 <- data1 %>% filter(State=="Newfoundland and Labrador" | State== provinces[k])
+for (i in 1:repetitions)
+{
+  sim <-data2 %>% mutate(State = sample(State))
+  below_NL <- sim %>%
+    filter(SeverityScore >= med &
+             State=="Newfoundland and Labrador")%>% summarize(n())
+  below_notNL <- sim %>%
+    filter(SeverityScore >= med &
+             State==provinces[k]) %>% summarize(n())
+  p_diff <- (below_NL/n_NL - below_notNL/n_notNL)
+  simulated_stats[i] <- as.numeric(p_diff)
+}
+sim <- data_frame(p_diff=simulated_stats)
+
+extreme_count <- sim %>%   filter(p_diff >= abs(test_stat) | p_diff <= -1*abs(test_stat)) %>%
+  summarise(n()) 
+
+p_value8 <- as.numeric(extreme_count)/(repetitions) 
+
+
+k= 9
+
+set.seed(130)
+
+repetitions <- 1000
+simulated_stats <- rep(NA, repetitions)
+
+data1 <- hazarddat %>% 
+  filter(hazarddat$Country== "Canada") 
+
+data_NL <- data1 %>% filter(data1$State == "Newfoundland and Labrador")
+
+
+n_NL <- data1 %>% filter(State=="Newfoundland and Labrador")%>%summarise(n())
+n_notNL <- data1 %>% filter(State == provinces[k])%>%summarise(n())
+med <- median(data_NL$SeverityScore)
+
+below_NL <- data1 %>% filter(SeverityScore >= med & State=="Newfoundland and labrador") %>% summarize(n()) 
+
+below_notNL <- data1 %>%filter(SeverityScore >= med & State==provinces[k]) %>% summarize(n())
+
+
+test_stat <- as.numeric(below_NL/n_NL - below_notNL/n_notNL) 
+data2 <- data1 %>% filter(State=="Newfoundland and Labrador" | State== provinces[k])
+for (i in 1:repetitions)
+{
+  sim <-data2 %>% mutate(State = sample(State))
+  below_NL <- sim %>%
+    filter(SeverityScore >= med &
+             State=="Newfoundland and Labrador")%>% summarize(n())
+  below_notNL <- sim %>%
+    filter(SeverityScore >= med &
+             State==provinces[k]) %>% summarize(n())
+  p_diff <- (below_NL/n_NL - below_notNL/n_notNL)
+  simulated_stats[i] <- as.numeric(p_diff)
+}
+sim <- data_frame(p_diff=simulated_stats)
+
+extreme_count <- sim %>%   filter(p_diff >= abs(test_stat) | p_diff <= -1*abs(test_stat)) %>%
+  summarise(n()) 
+
+p_value9 <- as.numeric(extreme_count)/(repetitions) 
+
+
+pvalue_data <- c(p_value1, p_value2, p_value3, p_value4, p_value5, p_value6, p_value7, p_value8, p_value9)
+data_pvalue <- data.frame(pvalue_data)
+data_provinces <- data.frame(provinces)
+
+new_provinces=c("AB", "BC", "MB", "NB","NS", "ON", "PE", "QC", "SK")
+pvalue_data <- c(p_value1, p_value2, p_value3, p_value4, p_value5, p_value6, p_value7, p_value8, p_value9)
+data_pvalue <- data.frame(pvalue_data)
+data_provinces <- data.frame(new_provinces)
+table.pvalue_data <- data_provinces %>% bind_cols(data_pvalue)
+```
+
+```{r, echo=FALSE,message=FALSE, warning=FALSE, fig.height=3}
+ggplot(table.pvalue_data, aes(x= new_provinces, y = pvalue_data, group=1)) + geom_point() + geom_line(colour = "red") +geom_hline(yintercept = 0.05, color="blue")
+```
+
+---
+
+- We get nine p-values after simulating for each province. There are eight p-values that below 0.05, which indicates the test statics are extremely unlikely if the difference between two proportions is 0. We can conclude that we have strong evidence that the two proportions are different between NL and the eight provinces. However, as the plot shows, the p-value of Prince Edward Island is 0.474, which we do not have evidence to against null hypothesis. Therefore, we conclude that the two proportions are equal between NL and Prince Edward Island.
+
+## Conclusion
+- To conclude, the province with the highest driving hazardous incidence is Newfoundland, and the hypothesis test we used shows that the hazardous driving situation in Newfoundland is different from the other provinces in Canada except Prince Edward Island.
+
+- We've made a lot of attempts while analyzing the data.While doing the hypothesis test, we first choose the median SeverityScore of Canada to be the cut-off point, but for the first two provinces we tested, we got p-values equal to 0.That's why we finally decided to use the median SeverityScore of NL to be the cutoff point.
+Also, we tried to examine the relationship between the population of the province and the severityscore.We expected to get a positive linear relationship.But instead, we got a negative linear relationship.
+
+---
+
+```{r, echo=FALSE,message=FALSE, warning=FALSE, fig.height=3}
+population <- c(4.146, 4.631, 1.282, 0.7539, 0.5284, 0.9429, 13.6, 0.1463, 8.215, 1.13)
+Population <- data_frame(population)
+table_data <- table_data %>% bind_cols(Population)
+
+ggplot(table_data, aes(x=Population, y=Avg_SeverityScore, alpha = State))+geom_point(size=4.8)
+```
+
+## Acknowledgements
+
+Our group would like to thank our TA Lee for providing suggestions for our project. In addition, thank you to our professors Nathan Taback and Alison Gibbs for guidance with the project. Finally, a special thank you to Geotab Data Scientist Brenda Nguyen for allowing us to use the Geotab data and providing insight to the hazardous driving data.
+

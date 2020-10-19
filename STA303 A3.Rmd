@@ -1,0 +1,149 @@
+---
+title: "Untitled"
+author: "Xinrui Wang"
+output: html_document
+---
+
+```{r, message=FALSE,echo=TRUE}
+theFile = 'birthData.rds' 
+if(!file.exists(theFile)) { download.file('http://pbrown.ca/teaching/303/data/birthData.rds', theFile)
+} 
+x = readRDS(theFile)
+```
+
+```{r}
+x$bygroup = factor(gsub("[[:space:]]", "", paste0(x$MetroNonmetro, x$MothersHispanicOrigin))) 
+x$timeInt = as.numeric(x$time) 
+x$y = as.matrix(x[,c('Male','Female')]) 
+x$sin12 = sin(x$timeInt/365.25) 
+x$cos12 = cos(x$timeInt/365.25) 
+x$sin6 = sin(2*x$timeInt/365.25) 
+x$cos6 = cos(2*x$timeInt/365.25) 
+baselineDate = as.Date('2007/1/1') 
+baselineDateInt = as.integer(baselineDate)
+```
+
+```{r, eval=FALSE}
+# A GAM model is fitted
+res = mgcv::gam(y ~ bygroup + cos12 + sin12 + cos6 + sin6 + s(timeInt, by=bygroup, k = 120, pc=baselineDateInt), data=x, family=binomial(link='logit'))
+
+#A GLMM is fitted
+res2 = gamm4::gamm4(y ~ bygroup + cos12 + sin12 + cos6 + sin6 + s(timeInt, by=bygroup, k = 120, pc=baselineDateInt), random = ~(1|bygroup:timeInt), data=x, family=binomial(link='logit'))
+
+#y: male birth per month
+```
+
+## Q1 Birth
+# 1
+`res`:
+\begin{align*}
+Y_i \sim & \text{Binomial}(N, p)\\
+logit(\mu_i) = & \boldsymbol{X_{i} \beta} + f(t_i)*bygroup_i\\
+\end{align*}
+
+where $X_{i0} = 1, X_{i1} = bygroup_i,X_{i2} = cos(ti/365.25),X_{i3} = sin(ti/365.25),X_{i4} = cos(2ti/365.25),X_{i3} = sin(2ti/365.25)$; $\mu_i = E(Y_i|\boldsymbol{X_i})$; N is the total number of observations and p is the proportion of babies born who are male.
+
+`res2`:
+\begin{align*}
+Y_i \sim & \text{Binomial}(N, p)\\
+logit(\mu_i) = & \boldsymbol{X_{i} \beta} + f(t_i)*bygroup_i + Z_i\\
+\end{align*}
+
+where $X_{i0} = 1, X_{i1} = bygroup_i,X_{i2} = cos(ti/365.25),X_{i3} = sin(ti/365.25),X_{i4} = cos(2ti/365.25),X_{i3} = sin(2ti/365.25)$; $Z_i$ is the random intercept with interactive term $bygroup_i*t_i$; $\mu_i = E(Y_i|\boldsymbol{X_i})$; N is the total number of observations and p is the proportion of babies born who are male.
+
+# 2
+
+I will take a look at 
+1) `Figure 1`, particularly the second column. Since it shows the ratio of male babies to female babies over across the time before and after the election for two types of people. By looking at the graph (c) and (g), we can see that there is a cyclical trend in the number of births. Although the ratio of M/F decreases after March 2017, the ratios are similar to those in the previous cycle before for both groups of people. So based on `Figure 1`, we can say that there is no significant drop in the proportion of babies born who are male after Trump being elected.
+
+2) `Figure 3`, the plot of independent random effect predictions. We fitted random effects for every group at every time. And from the both plots, similarly to `Figure 1`, there is no significant change in random effects before and after March 2017 for both groups and in both (a) and (b), random effects fluctuate around 1. This implies that there is not much variance in male babies' birth by females with different ethnicity in different time period of gestation relative to the March 2017. (Consistent with a small SD, 0.0022596, for random effect in the output of `lme4::VarCorr(res2$mer)`.) i.e. there is no significant drop in the proportion of babies born who are male after Trump being elected.
+
+
+
+
+
+
+
+
+
+3. Write a short report (a paragraph or two) addressing the following hypothesis: The long-term trend in sex ratios for urban Hispanics and rural Whites is consistent with the hypothesis that discrimination against Hispanics, while present in the full range of the dataset, has been increasing in severity over time.
+4. Write a short report addressing the following hypothesis: The election of Trump in November 2016 had a noticeable effect on the sex ratio of Hispanic-Americans roughly 5 months after the election.
+
+## Q2
+```{r, echo = TRUE, eval=FALSE, cache=FALSE}
+if(!requireNamespace("nCov2019")) { devtools::install_github("GuangchuangYu/nCov2019")
+}
+x1 <- nCov2019::load_nCov2019(lang = 'en') 
+hubei = x1$province[which(x1$province$province == 'Hubei'), ] 
+hubei$deaths = c(0, diff(hubei$cum_dead)) 
+italy = x1$global[which(x1$global$country == 'Italy'), ] 
+italy$deaths = c(0, diff(italy$cum_dead)) 
+x = list(Hubei= hubei, Italy=italy)
+
+# death = number of increase in death compared to the previous day
+
+x$Hubei$weekday = format(x$Hubei$time, '%a')
+x$Italy$weekday = format(x$Italy$time, '%a') 
+x$Italy$timeInt = as.numeric(x$Italy$time) 
+x$Hubei$timeInt = as.numeric(x$Hubei$time) 
+x$Italy$timeIid = x$Italy$timeInt 
+x$Hubei$timeIid = x$Hubei$time
+gamItaly = gamm4::gamm4(deaths ~ weekday + s(timeInt, k=40), random = ~(1|timeIid), data=x$Italy, family=poisson(link='log'))
+gamHubei = gamm4::gamm4(deaths ~ weekday + s(timeInt, k=100), random = ~(1|timeIid), data=x$Hubei, family=poisson(link='log'))
+Hubei4 = lme4::glmer(deaths ~ weekday + timeInt + (1|timeIid), data=x$Hubei, family=poisson(link='log'))
+```
+
+# 1
+Write a down the statistical model corresponding to the gamm4 calls above, explaining in words what all of the variables are.
+
+The two models are `gamItaly` and `gamHubei`. 
+`gamItaly`: 
+\begin{align*}
+Y_t \sim & \text{Poisson}(\lambda_t)\\
+log(\lambda_t) = & \beta_0 + \beta_1X_{t} + f(t; v) + Z_t\\
+\end{align*}, 
+where $X_t$ is a categorical variable for day-of-week, $Z_t$ is the random effect/overdispersion, t denotes `timeInt`, f(·) is the smoothly-varying function with smoothness parameter v.
+
+`gamHubei`:
+\begin{align*}
+Y_t \sim & \text{Poisson}(\lambda_t)\\
+log(\lambda_t) = & \beta_0 + \beta_1X_{t} + f(t; v) + Z_t\\
+Z_t \sim & \text{N}(0,\sigma^2)
+\end{align*}, 
+where $X_t$ is a categorical variable for day-of-week, $Z_t$ is the random effect/overdispersion, t denotes `timeInt`, f(·) is the smoothly-varying function with smoothness parameter v.
+
+
+# 2
+
+By March 23rd, the increase of COVID-19 deaths in Hubei has fallen below 10, maintaining the decreasing trend in number of deaths since mid-February. On average, the increase is the greatest on Sunday, with a value of 0.229, and the number ranges from 0.14 to 0.225 from Monday to Saturday. It is predicted that the expected increase in death will keep on decreasing, but it is still possible for the number to increase again as the variation in random effect of time on number of increase is large.
+
+However, in Italy, the increase of COVID-19 deaths has increased sharply since the beginning of March. So far, the number rises the lowest on Sunday, by about 0.84, and that for the other 6 days are all above 2.7 on average. This increment is much larger than that in Hubei. According to the prediction, we are 95% confident that the increase in deaths will keep on increasing in Italy to April, either with a higher or lower rate of increase.
+
+# 3
+(1) The LRT on `Hubei2$mer` and `gamHubei$mer` is invalid since
+`gamHubei` uses the default for gamm4 which is REML=TRUE and we shouldn't be testing REML with LRT.
+
+Nesting:
+`Hubei2$mer` is nested within `gamHubei$mer` .
+The only difference between them is the first term in the model. For `Hubei2$mer`, the term "1" indicates the existence/requirement of an intercept and as "1" is nested within all real numbers/intercepts, it is also nested within the intercept of `gamHubei$mer`.
+
+Boundary Correction:
+Since one model is nested within the other, and we are not testing the significance of the random effect, we don't need a boundary correction.
+
+(2) The LRT on `Hubei3` and `gamHubei$mer` is invalid since
+`gamHubei` uses the default for gamm4 which is REML=TRUE and we shouldn't be testing REML with LRT. 
+
+Nesting: Here, `Hubei3` is a GAM  and `gamHubei$mer` is a GLMM.
+`Hubei3` is not nested within `gamHubei$mer` since the latter does not contain smooth term.
+`gamHubei$mer` is not nested within `Hubei3` since the latter does not contain the random effect.
+Thus, none of the models is nested within the other.
+
+Boundary Correction: Thus boundary correction is not needed since there is no valid LR test for the two models.
+
+(3) The LRT on `Hubei4` and `gamHubei$mer` is invalid since `gamHubei` uses the default for gamm4 which is REML=TRUE and we shouldn't be testing REML with LRT. 
+
+Nesting: `Hubei4` and `gamHubei$mer` both regress on `weekday` and contain the random effect `timeInt`. The only difference is that `gamHubei$mer` has smoothed `timeInt`(term named `Xs(timeInt)Fx1`) but `Hubei4` not(term named `timeInt`). Since a linear basis is part of the set of basis functions for the smooth by constraining the coefficients for all the other basis functions to 0, `Hubei4` is nested within `gamHubei$mer`. 
+
+Boundary Correction: As one model is nested within the other, and we are not testing the significance of the random effect, we don't need a boundary correction.
+
+(4) The LRT on `Hubei2$mer` and `Hubei3` is

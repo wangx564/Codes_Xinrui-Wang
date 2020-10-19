@@ -1,0 +1,231 @@
+---
+title: "A1"
+author: "Xinrui Wang"
+date: "2020/1/18"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Q1a
+
+1)Equation: $\text{average season rating}_i $ = $d_{1990}*\mu_{1990}+d_{2000}*\mu_{2000}+d_{2010}*\mu_{2010}+\epsilon_i$
+where di's are dummy variables for decade i
+2) Assumption for ANOVA:
+1. Errors are independent (observations are independent) 
+2. Errors are normally distributed with E[$\epsilon_i$] = 0
+3. Constant variance (homoscedasticity), var[$\epsilon_i$] = $\sigma^2$
+
+Q1b
+$H_0$: $\mu_{1990} = \mu_{2000} = \mu_{2010}$, the average season rating for crime shows is the same decade to decade
+$H_a$: at least one of the average season ratings for crime shows is different from the others
+
+Q1c
+```{r, echo=TRUE}
+library(tidyverse)
+
+# load crimeshow data 
+crime_show_data <- readRDS("crime_show_ratings.RDS")
+# Side by side box plots 
+crime_show_data %>% ggplot(aes(x = decade, y = season_rating)) + geom_boxplot() + ggtitle("Boxplots of average rating by decade for crime TV shows")
+
+# Facetted histograms 
+crime_show_data %>% ggplot(aes(x = season_rating)) + geom_histogram(bins=20) + facet_wrap(~decade) + ggtitle("Histograms of average rating by decade for crime TV shows")
+```
+
+1)I prefer the boxplot since it is more straightforward: mean and the values between 25th and 75th percentile can be easily seen(shown by the lines and the box) and compared across decades
+
+2)I would improve it by investigating the outliers. If they are anomalous, I would take them out and create a boxplot without outliers. 
+
+3) No. The difference is small as average ratings of 3 decades are all around 8 from the boxplot.
+
+Q1d
+```{r}
+attach(crime_show_data)
+
+a <- aov(season_rating ~ decade, data = crime_show_data)
+
+summary(a)
+```
+From the ANOVA, the p-value under the null hypothesis test is 0.238 which is larger than 0.05. This does not provide evidence against $H_0$. Therefore, the sample supports $H_0$: average season ratings for crime shows are the same decade to decade.
+
+Q1e
+```{r}
+plot(a, 1)
+plot(a, 2)
+```
+The first plot shows the residuals of the model against the fitted values and the second plot shows the standardized residuals against a theoretical normal distribution of residuals. 
+
+From the first plot: no random pattern is seen and points are not centered around 0 (E($\epsilon_i$),indicated by the red line). Thus, the assumption of E($\epsilon_i$) = 0 is violated.
+
+From the second plot: a staright line can be fitted into the points/the points clearly form a straight line, thus, the assumption of $\epsilon_i$ follows a normal distribution is satisfied.
+
+```{r}
+var = crime_show_data %>% 
+  group_by(decade) %>% 
+  summarise(var_rating = sd(season_rating)^2)
+var
+
+max(var[,2])/min(var[,2]) < 3
+```
+Here, $\frac{S_{max}^2}{S_{min}^2 }$ < 3. Therefore, the constant variance assumption of $\epsilon_i$ is satisfied.
+
+1f
+```{r}
+l = lm(season_rating ~ decade)
+summary(l)
+
+# to get mean season rating of each decade
+c(lm(season_rating ~ 1, filter(crime_show_data, decade == 1990))$coef, 
+  lm(season_rating ~ 1, filter(crime_show_data, decade == 2000))$coef, 
+  lm(season_rating ~ 1, filter(crime_show_data, decade == 2010))$coef)
+```
+The intercepts are exactly the mean seanson rating for each decade. For 1990s, mean = intercept, 7.9222. For the next decade, mean = intercept + 0.1368. Then, the next decade, mean = intercept + 0.1938.
+That is, $\hat\mu_{1990s}$ = 7.922151, $\hat\mu_{2000s}$ = 8.058942, $\hat\mu_{2010s}$ = 8.115985.
+
+
+```{r}
+smokeFile = 'smokeDownload.RData' 
+if(!file.exists(smokeFile)){ download.file('http://pbrown.ca/teaching/303/data/smoke.RData', smokeFile)} 
+(load(smokeFile))
+smokeFormats[
+smokeFormats[,'colName'] == 'chewing_tobacco_snuff_or', c('colName','label')]
+smokeSub = smoke[which(smoke$Age > 10 & !is.na(smoke$Race)), ]
+
+smokeSub$ageC = smokeSub$Age - 16
+smokeModel = glm(chewing_tobacco_snuff_or ~ ageC + RuralUrban + Race + Sex, data=smokeSub, family=binomial(link='logit'))
+knitr::kable(summary(smokeModel)$coef, digits=3)
+```
+
+```{r}
+logOddsMat = cbind(est=smokeModel$coef, confint(smokeModel, level=0.99)) 
+oddsMat = exp(logOddsMat) 
+oddsMat[1,] = oddsMat[1,] / (1+oddsMat[1,]) 
+
+rownames(oddsMat)[1] = 'Baseline prob' 
+knitr::kable(oddsMat, digits=3)
+```
+Q2a
+
+1) In 'smokeModel', the response variable£¬$Y_i$, follows a binomial distribution. i.e. $Y_i$~Binomial(N,$\mu_i$), where N equals the totoal number of observations,20,716 and $\mu_i$ equals to the probability of  have used chewing tobacco, snuff, or dip on 1 or more days in the past 30 days,given $X_i$.
+
+The model is fitted into a glm, precisely, a logistic model. Such that $log(\frac{\mu_i}{1-\mu_i})$ = $\boldsymbol{X_i\beta}$.
+
+2) See the table below for definitions of variable $Y_i's$ and $X_{ij}'s$ where i = 1, ..., 20,716(total number of observations in 'smokeSub') and j = 1, ..., 8(total number of $\beta's$ other than $\beta_0$):
+
+| Variable | Definition                                                                                                           |
+|----------|----------------------------------------------------------------------------------------------------------------------|
+| $Y_i$    | the number of people in the data that have used chewing tobacco, snuff, or dip on 1 or more days in the past 30 days |
+| $X_{i1}$ | the age of person i - 16                                                                                             |
+| $X_{i2}$ | a binary variable, equals to 1 when person i lives in the rural area; 0 if in the urban area                         |
+| $X_{i3}$ | a binary variable, equals to 1 when the race of person i is 'Black'; 0 if not 'Black'                                |
+| $X_{i4}$ | a binary variable, equals to 1 when the race of person i is 'Hispanic'; 0 if not 'Hispanic'                          |
+| $X_{i5}$ | a binary variable, equals to 1 when the race of person i is 'Asian'; 0 if not 'Asian'                                |
+| $X_{i6}$ | a binary variable, equals to 1 when the race of person i is 'Native'; 0 if not 'Native'                              |
+| $X_{i7}$ | a binary variable, equals to 1 when the race of person i is 'Pacific'; 0 if not 'Pacific'                            |
+| $X_{i8}$ | a binary variable, equals to 1 when the person i is female; 0 if male                                                |
+
+Q2b
+'Baseline prob' is the probability of 16-year-old, urban white men that used chewing tobacco, snuff, or dip on 1 or more days in the past 30 days.
+
+Q2c
+
+```{r,echo=TRUE,eval=FALSE}
+newData = data.frame(Sex = rep(c('M','F'), c(3,2)), Race = c('white','white','hispanic','black','asian'), ageC = 0, RuralUrban = rep(c('Rural','Urban'), c(1,4)))
+
+smokePred = as.data.frame(predict(smokeModel, newData, se.fit=TRUE, type='link'))[,1:2]
+
+smokePred$lower = smokePred$fit - 3*smokePred$se.fit 
+smokePred$upper = smokePred$fit + 3*smokePred$se.fit 
+
+expSmokePred = exp(smokePred[,c('fit','lower','upper')])
+
+knitr::kable(cbind(newData[,-3],100*expSmokePred/(1+expSmokePred)), digits=1)
+```
+1) See from the table above that rural white males have the highest probability of using chewing tobacco.(By comparing the fitted probability, upper and lower bonds of the 99% CI. Rural white males is the only group that has probability over 10%.) And see that the estimated/fitted value is inside the 99% CI, there is no evidence to reject the hypothesis. Therefore, our data support the hypothesis that rural white males are the group most likely to use chewing tobacco.
+
+2) See the last 2 rows of the table, notice that the fitted probabilities of urban black and urban asian females (ethnic-minority urban women) are both inside the 99% CI. This provides evidence that data support the claim of less than half of one percent(0.5%) of ethnic-minority urban women and girls chew tobacco.
+
+Q3a
+```{r}
+fijiFile = 'fijiDownload.RData'
+if(!file.exists(fijiFile)){ download.file(
+'http://pbrown.ca/teaching/303/data/fiji.RData', fijiFile)
+} 
+(load(fijiFile))
+```
+
+```{r}
+
+fijiSub = fiji[fiji$monthsSinceM > 0 & !is.na(fiji$literacy),] 
+
+fijiSub$logYears = log(fijiSub$monthsSinceM/12) 
+
+fijiSub$ageMarried = relevel(fijiSub$ageMarried, '15to18') 
+fijiSub$urban = relevel(fijiSub$residence, 'rural')
+fijiRes = glm( children ~ offset(logYears) + ageMarried + ethnicity + literacy + urban, family=poisson(link=log), data=fijiSub) 
+
+logRateMat = cbind(est=fijiRes$coef, confint(fijiRes, level=0.99)) 
+knitr::kable(cbind( summary(fijiRes)$coef, exp(logRateMat)), digits=3)
+
+#2nd model
+fijiSub$marriedEarly = fijiSub$ageMarried == '0to15' 
+
+fijiRes2 = glm( children ~ offset(logYears) + marriedEarly + ethnicity + urban, family=poisson(link=log), data=fijiSub) 
+
+logRateMat2 = cbind(est=fijiRes2$coef, confint(fijiRes2, level=0.99)) 
+knitr::kable(cbind(summary(fijiRes2)$coef, exp(logRateMat2)), digits=3)
+```
+Q3a
+
+1) In 'fijiRes', the response variable£¬$Y_i$, follows the Poisson distribution. i.e. $Y_i$~Poisson($\mu$).
+$\mu$ = E(Y) = var(Y)
+The model is fitted into a Poisson glm such that $log(\mu)$ = $\boldsymbol{X_i\beta}$.
+
+2) See the table below for definitions of variable $Y_i's$ and $X_{ij}'s$ where i = 1, ..., 4,908(total number of observations in 'fijiSub') and j = 1, ..., 16(total number of $\beta's$ other than $\beta_0$):
+
+| Variable  | Definition                                                                                        |
+|-----------|---------------------------------------------------------------------------------------------------|
+| $Y_i$     | the number of children the woman has after being first married                                    |
+| $X_{i1}$  | a binary variable, equals to 1 if the woman i ages between 0 and 15 when first married; 0 if not  |
+| $X_{i2}$  | a binary variable, equals to 1 if the woman i ages between 18 and 20 when first married; 0 if not |
+| $X_{i3}$  | a binary variable, equals to 1 if the woman i ages between 20 and 22 when first married; 0 if not |
+| $X_{i4}$  | a binary variable, equals to 1 if the woman i ages between 22 and 25 when first married; 0 if not |
+| $X_{i5}$  | a binary variable, equals to 1 if the woman i ages between 25 and 30 when first married; 0 if not |
+| $X_{i6}$  | a binary variable, equals to 1 if the woman i ages greater than 30 when first married; 0 if not   |
+| $X_{i7}$  | a binary variable, equals to 1 if woman i is Indian; 0 if not                                     |
+| $X_{i8}$  | a binary variable, equals to 1 if woman i is European; 0 if not                                   |
+| $X_{i9}$  | a binary variable, equals to 1 if woman i is part European; 0 if not                              |
+| $X_{i10}$ | a binary variable, equals to 1 if woman i is Pacific Islander; 0 if not                           |
+| $X_{i11}$ | a binary variable, equals to 1 if woman i is Routman; 0 if not                                    |
+| $X_{i12}$ | a binary variable, equals to 1 if woman i is Chinese; 0 if not                                    |
+| $X_{i13}$ | a binary variable, equals to 1 if woman i is 'other'; 0 if not                                    |
+| $X_{i14}$ | a binary variable, equals to 1 if woman i is illiterate; 0 if literate                            |
+| $X_{i15}$ | a binary variable, equals to 1 if woman i lives in the capital city of Suva; 0 if not             |
+| $X_{i16}$ | a binary variable, equals to 1 if woman i lives in other urban areas; 0 if not                    |
+
+Q3b
+```{r}
+lmtest::lrtest(fijiRes2, fijiRes)
+```
+
+1) Yes. 'fijiRes2' is nested in 'fijiRes'. Because: 1. predictors of model fijiRes2: offset(logYears), ethnicity and urban all can be found in fijiRes. 2.the predictor 'marriedEarly' is a simplified version of the predictor 'ageMarried' OR 'marriedEarly' is created from 'ageMarried' so that 'marriedEarly' can also be found in the model 'fijiRes'.
+And the command lmtest::lrtest(fijiRes2, fijiRes) runs a likelihood ratio test comparing the two. 
+See that the p-value is greater than 0.01, therefore, we fail to reject $H_0$. So that 'fijiRes2' explains the data roughly as well as 'fijiRes'.
+
+2) There are 2 constraints:
+1. the value of $\beta_{literacy}$ is 0 in 'fijiRes2'.
+2. the value of $\beta_{marriedEarly}$ in 'fijiRes2' is the increase in log($\mu$) for a woman married early than not early, while the value of the other predictors are the same whereas values of $\beta_{ageMarried}$for various age groups in 'fijiRes' are increases in log($\mu$) for a woman in the corresponding age group than a woman between age 15 and 18.
+
+Q3c
+I will fit the data into the model 'fijiRes2'.
+$H_0$: $\beta_{literacy}$ = $\beta_{ageMarried > 15}$ = 0
+$H_a$: one of $\beta_{literacy}$ and $\beta_{ageMarried > 15}$ ¡Ù 0
+
+I looked at the p-values. It is found that none of the p-values is less than 0.01. Therefore, there is have no evidence to reject $H_0$. This means the data supports that there was no way for married women to influence their birth intervals.
