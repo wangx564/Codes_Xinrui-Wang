@@ -1,0 +1,128 @@
+---
+title: "ECO374 HW2"
+author: "Xinrui Wang"
+output: word_document
+---
+# Q1
+```{r, echo=FALSE, cache=TRUE}
+setwd("C:/Users/Owner/Desktop/ECO374/Homework/2")
+df = read.csv("Data.csv") 
+#only select the data from 1985, Quarter 1
+colnames(df)[1] = "DATE"
+ti = match("1985.1", df$DATE)
+df = df[ti:nrow(df),]
+#remove duplicates & convert the df to ts
+df$dupe = as.integer(duplicated(df$DATE,fromLast = TRUE))
+df = df[df$dupe == 0, ]
+d = df[, c(5, 6)]
+n = nrow(d)
+d2 = as.data.frame(cbind(d[c(2:n), 1], d[c(1:(n-1)), 2]))
+colnames(d2) = c("Realized", "Forecast")
+df_ts = ts(d2, start = 1985, frequency = 4)
+```
+
+```{r, echo=FALSE}
+# calculate forecast errors = actual - forecast
+fe = d2[, 1] - d2[, 2]
+fe_ts = ts(fe, start = 1985, frequency = 4)
+fe_ts
+```
+
+```{r, echo=FALSE, fig.height = 4.5, fig.width = 9}
+p = ts(cbind(d2, fe), start = 1985, frequency = 4)
+
+plot.ts(p, 
+        plot.type = c("single"), 
+        col = c("Black","Dark Grey", "Red"), 
+        lty = c(1, 1, 2),
+        lwd = c(0.5, 2, 0.5),
+        main = "Plot of Realized Values, Forecasts, & Forecast Errors \n of Real GDP Growth",
+        ylab = "Annualized Percentage Points",
+        xlab = "Time")
+legend(x="bottomleft", legend=c("Realized", "Forecast", "Forecast Error"), col=c("Black","Dark Grey", "Red"), lty=c(1, 1, 2), cex=0.8)
+abline(h = 0, col = "Blue")
+```
+```{r, echo=FALSE}
+#summary statistics
+summary(d2$Realized)
+sd(d2$Realized)
+
+summary(d2$Forecast)
+sd(d2$Forecast)
+
+summary(fe)
+sd(fe)
+```
+
+```{r, echo=FALSE, fig.height = 4.5, fig.width = 9}
+# compute ACF and PACF of realized & forecast & fe
+acf(p[,1], main = "ACF of Realized Values")
+acf(p[,2], main = "ACF of Forecasts")
+acf(fe_ts, main = "ACF of Forecast Errors")
+
+pacf(p[,1], main = "PACF of Realized Values")
+pacf(p[,2], main = "PACF of Forecasts")
+pacf(fe_ts, main = "PACF of Forecast Errors")
+```
+
+```{r}
+acf(p[,1], plot = FALSE)
+acf(p[,2], plot = FALSE)
+acf(fe_ts, plot = FALSE)
+
+pacf(p[,1],  plot = FALSE)
+pacf(p[,2], plot = FALSE)
+pacf(fe_ts, plot = FALSE)
+```
+
+
+## Q2
+```{r, echo=FALSE, message=FALSE}
+#run the regression
+library("dynlm")
+
+reg1 = dynlm(Realized ~ Forecast, data = df_ts)
+summary(reg1)
+
+#check if scatter around a 45 degree line
+plot(d2$Forecast, d2$Realized, main = "Scatterplot of Realized vs Forecast Values", ylab = "Realized", xlab = "Forecast")
+abline(coef = c(0,1), col = "Red")
+```
+
+```{r, echo=FALSE}
+library("car")
+
+H_0 = c("(Intercept) = 0", "Forecast = 1") 
+linearHypothesis(reg1, H_0)
+```
+
+## Q3
+```{r, echo=FALSE}
+#check if exp(e) = 0
+mean(fe_ts) #not equal to zero - what you conclude?
+```
+
+```{r, echo=FALSE}
+#run lag regs
+
+reg2 = dynlm(fe_ts ~ L(fe_ts, 2) + L(fe_ts, 6) + L(fe_ts, 7))
+summary(reg2)
+```
+
+```{r, echo=FALSE}
+reg3 = dynlm(fe ~ L(fe, 1) + L(fe, 2) + Forecast + L(Forecast, 1), data = p)
+summary(reg3)
+
+H_0 = c("Forecast = 0", "L(Forecast, 1) = 0") 
+linearHypothesis(reg3, H_0)
+```
+
+## Chapter 6, Ex4
+```{r, echo=FALSE}
+set.seed(408) 
+n = 100 
+eps=rnorm(n)
+y = 0.7 + arima.sim(list(ma=c(-2, 1.35)),n,innov=eps)
+acf(y, plot = FALSE)[1:10]
+```
+

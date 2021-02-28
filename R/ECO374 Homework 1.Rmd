@@ -1,0 +1,136 @@
+---
+title: "ECO374 HW1"
+author: "Xinrui Wang"
+date: "15/01/2021"
+output: word_document
+---
+# Q1
+
+```{r, echo=FALSE}
+# create a function for reading graphs and plot
+plots =  function(ds,s,f,c,lty,lwd,m,xl,yl,l,loc) {
+  setwd("C:/Users/Owner/Desktop/ECO374/Homework/1")
+  fname = paste0(ds,".csv")
+  dframe = read.csv(fname) 
+  if(tolower(colnames(dframe)[1]) == "date"){
+    d2 = data.frame(dframe[, 2:ncol(dframe)])}
+  df_ts = ts(d2, start = s, frequency = f)
+  plot.ts(df_ts, 
+        plot.type = c("single"), 
+        col = c, 
+        lty = lty,
+        lwd = lwd,
+        main = m,
+        ylab = yl,
+        xlab = xl)
+  if(ncol(d2) > 1){
+   legend(x = loc,legend=l,col=c,lty=lty,cex=1)
+  }
+}
+```
+
+## E.4
+```{r, echo=FALSE, fig.height = 4.5, fig.width = 9}
+m = "S&P/Case-Shiller Home Price Indices (12-Month Percentage Change),\n Monthly 1988/01 – 2020/10"
+yl = "Percent change, year ago"
+xl = "Year"
+l = c("10-City composite", "20-City composite")
+loc = "topleft"
+plots("Q1E.4", 1988, 12, c("black", "black"), c(1, 2), c(1,2), m,xl,yl,l,loc)
+abline(h = 0, col = "blue")
+```
+
+```{r, echo=FALSE, fig.height = 4.5, fig.width = 9}
+m = "S&P/Case-Shiller Home Price Indices ,\n Monthly 1987/01 – 2020/10"
+yl = "Index Jan 2000=100"
+xl = "Year"
+l = c("10-City composite", "20-City composite")
+loc = "topleft"
+plots("Q1E.4.2", 1987, 12, c("black", "black"), c(1, 2), c(1,2), m,xl,yl,l,loc)
+```
+
+
+## E.5
+```{r, echo=FALSE, fig.height = 4.5, fig.width = 9}
+m = "Dow Jones Industrials Index, Monthly 1988/01 – 2020/12"
+yl = ""
+xl = "Year"
+plots("Q1E.5", 1988, 12, "black", 1, 1, m,xl,yl)
+```
+
+## E.6
+```{r, echo=FALSE, fig.height = 4.5, fig.width = 9}
+m = "Exchange Rate U.S.$/ Euro, Monthly 1999/01 – 2020/12"
+yl = ""
+xl = "Year"
+plots("Q1E.6", 1999, 12, "black", 1, 1, m,xl,yl)
+```
+
+## E.7
+```{r, echo=FALSE, fig.height = 4.5, fig.width = 9}
+m = "Exchange Rate Japanese Yen/U.S.$, Monthly 1988/01 – 2020/12"
+yl = ""
+xl = "Year"
+plots("Q1E.7", 1988, 12, "black", 1, 1, m,xl,yl)
+```
+
+## E.9
+```{r, echo=FALSE, fig.height = 4.5, fig.width = 9}
+m = "Treasury Rates: Short-Term Rate (3-Month T-Bill) and Long-Term Rate (10-Year T-Bond),\n Monthly 1988/01 – 2020/12"
+yl = "Percent"
+xl = "Year"
+l = c("3-Month T-Bill", "10-Year T-Bond")
+loc = "topright"
+plots("Q1E.9", 1988, 12, c("black", "darkgrey"), c(1,1), c(1,2),m,xl,yl,l,loc)
+```
+
+# Q2
+```{r, echo=FALSE, fig.height = 4.5, fig.width = 9}
+m = "U.S. GDP Growth Rates and Standard & Poor’s(SP) 500 Returns,\n Quarterly 2011/01 – 2020/10"
+yl = "Rate"
+xl = "Year"
+l = c("U.S. GDP Growth Rates", "S&P 500 Index Return")
+loc = "top"
+plots("Q2.2", 2011, 4, c("red", "blue"), c(1,1), c(1,1),m,xl,yl,l,loc)
+abline(h = 0, lwd = 2, lty = 2)
+```
+
+```{r, echo=FALSE, fig.height = 4.5, fig.width = 9}
+df = na.omit(read.csv("Q2.2.csv"))
+summary(df$USGDP)
+sd(df$USGDP)
+hist(df$USGDP, main = "Histogram of U.S. GDP Quarterly Growth Rates in 2011/01 – 2020/10", xlab = "U.S. GDP Quarterly Growth Rate")
+
+summary(df$SP500)
+sd(df$SP500)
+hist(df$SP500, main = "Histogram of S&P500 Quarterly Returns in 2011/01 – 2020/10", xlab = "Standard & Poor’s (SP) 500 Quarterly Return")
+```
+
+### a)
+```{r, cache=TRUE, echo=FALSE}
+#convert the dataset to ts
+df2 = read.csv("Q2.2.csv")
+df_ts = ts(df2, start = 2011, frequency = 4)
+
+#run the regrssion
+library("dynlm")
+rega = dynlm(USGDP ~ SP500, data = df_ts)
+summary(rega)
+```
+### b)
+```{r, cache=TRUE, echo=FALSE}
+regb = dynlm(USGDP ~ L(SP500, 1) , data = df_ts)
+summary(regb)
+```
+
+### c)
+```{r, cache=TRUE, echo=FALSE}
+regc = dynlm(USGDP ~ L(SP500, 1) + L(SP500, 2) + L(SP500, 3) + L(SP500, 4) , data = df_ts)
+summary(regc)
+```
+
+### d)
+```{r, cache=TRUE, echo=FALSE}
+regd = dynlm(USGDP ~ L(SP500, 1) + L(SP500, 2) + L(SP500, 3) + L(SP500, 4) + L(USGDP, 1), data = df_ts)
+summary(regd)
+```

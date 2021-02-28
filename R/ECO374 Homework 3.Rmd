@@ -1,0 +1,59 @@
+---
+title: "ECO374 HW3"
+author: "Xinrui Wang"
+output: word_document
+---
+# Q1
+## a)
+```{r, echo=FALSE, cache=TRUE, fig.height = 4.5, fig.width = 9}
+setwd("C:/Users/Owner/Desktop/ECO374/Homework/3")
+df = read.csv("CAPCPI.csv") 
+df_ts = ts(df$CAPCPI, start = 1970, frequency = 1)
+plot.ts(df_ts, 
+        main = "Percent Change of Per Capita Personal Income \n in California (CAPCPI) from 1970 to 2019",
+        ylab = "Percentage Change",
+        xlab = "Time")
+abline(h = 0, col = "Blue")
+```
+
+## b)
+```{r, echo=FALSE, fig.height = 4.5, fig.width = 9}
+acf(df_ts, main = "ACF of CAPCPI")
+pacf(df_ts, main = "PACF of CAPCPI")
+acf(df_ts, main = "ACF of CAPCPI", plot=FALSE)
+pacf(df_ts, main = "PACF of CAPCPI", plot=FALSE)
+```
+
+## c)
+Based on the plot of ACF, I suggest that the model should be Autoregressive (AR) since the ACF decreases gradually after lag 1 instead of a cutoff. Precisely, the model AR(6) is appropriate since lag 6 is the last significant lag according to the ACF. But lag 7 and lag 8 are also not very insignificant, so AR(7) and AR(8) will also be tested.
+
+Based on the plot of PACF, I suggest that the model should be Autoregressive (AR) since the PACF cutoffs after lag 1 instead of declining gradually to 0. Precisely, the model AR(1) should be testes since lag 1 is significant. But lag9 is also not very insignificant, so AR(9) will also be tested.
+
+In summary, model AR(1), AR(7), AR(8), and AR(9) all should be tested for this time series.
+
+```{r}
+AR1 = arima(df_ts, order=c(1,0,0)) #lowest AIC, AR(1) is  
+AR1$aic
+AR7 = arima(df_ts, order=c(7,0,0))
+AR7$aic
+AR8 = arima(df_ts, order=c(8,0,0))
+AR8$aic
+AR9 = arima(df_ts, order=c(9,0,0))
+AR9$aic
+```
+AR(1) is considered for making forecasts because it has the lowest AIC.
+
+## d)
+
+```{r}
+AR1
+```
+The model is $y_t = 5.4932 + 0.5961y_{t-1} + \epsilon_t$.
+
+### 1-Step-, 2-Step-, and 3-Step Ahead Forecasts
+```{r, fig.height = 4.5, fig.width = 9}
+predict(AR1, n.ahead=3)
+plot(predict(AR1,n.ahead=3)$pred, main = "Plot of 3-Step Ahead Forecasts", ylab = "Percentage Change", xlab = "Time")
+ts.plot(df_ts, predict(AR1,n.ahead=3)$pred, gpars = list(col=c("black","red")) , main = "Plot of CAPCPI with 3-Step Ahead Forecasts", ylab = "Percentage Change", xlab = "Time")
+```
+
