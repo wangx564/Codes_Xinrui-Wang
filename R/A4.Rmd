@@ -1,0 +1,139 @@
+---
+title: "STA442 A4"
+author: "Xinrui Wang"
+output: word_document
+---  
+# Q1
+```{r, cache=TRUE, message=FALSE}
+library(diseasemapping)
+setwd('/Users/Owner/Desktop/STA442/Assignment/A4')
+load('wisconsin.RData')
+load('resWisconsin.RData')
+
+resTrump = diseasemapping::bym(trump ~ logPdens + propWhite +
+propInd, data = wisconsinCsubm, prior = list(sd = c(log(2.5), 0.5), propSpatial = c(0.5, 0.5)), Ntrials = wisconsinCsubm$Total, family = "binomial", control.fixed = list(mean.intercept = 0, prec.intercept = 1/(100^2), mean = 0, prec = 1/(100^2)))
+```
+
+```{r, cache=TRUE, message=FALSE, eval=FALSE}
+theColTrump = mapmisc::colourScale(wisconsinCsubm$propTrump, col = "RdBu", breaks = sort(unique(setdiff(c(0, 1, seq(0.2, 0.8, by = 0.1)), 0.5))), style = "fixed", rev = TRUE)
+theColPop = mapmisc::colourScale(wisconsinCsubm$pdens, col = "Spectral", breaks = 11, style = "equal", transform = "log", digits = 1, rev = TRUE) 
+theColWhite = mapmisc::colourScale(wisconsinCsubm$propWhite, col = "Spectral", breaks = c(0, 0.5, 0.8, 0.9, seq(0.9, 1, by = 0.02)), style = "fixed", rev = TRUE)
+theColInd = mapmisc::colourScale(wisconsinCsubm$propInd, col = "Spectral", breaks = seq(0, 1, by = 0.1), style = "fixed", rev = TRUE)
+theBg = mapmisc::tonerToTrans(mapmisc::openmap(wisconsinCm, fact = 2, path = "stamen-toner"), col = "grey30") 
+theInset = mapmisc::openmap(wisconsinCm, zoom = 6, path = "stamen-watercolor", crs = mapmisc::crsMerc, buffer = c(0, 1500, 100, 700) * 1000)
+library("sp") 
+mapmisc::map.new(wisconsinCsubm, 0.85) 
+sp::plot(wisconsinCsubm, col = theColTrump$plot, add = TRUE, lwd = 0.2)
+raster::plot(theBg, add = TRUE, maxpixels = 10^7) 
+mapmisc::insetMap(wisconsinCsubm, "bottomright", theInset, outer = TRUE, width = 0.35) 
+mapmisc::scaleBar(wisconsinCsubm, "top", cex = 0.8) 
+mapmisc::legendBreaks("topright", theColTrump, bty = "n", inset = 0) 
+mapmisc::map.new(wisconsinCsubm, 0.85) 
+plot(wisconsinCsubm, col = theColPop$plot, add = TRUE, lwd = 0.2)
+plot(theBg, add = TRUE, maxpixels = 10^7) 
+mapmisc::legendBreaks("right", theColPop, bty = "n", inset = 0) 
+```
+
+```{r, cache=TRUE, message=FALSE, eval=FALSE}
+mapmisc::map.new(wisconsinCsubm, 0.85) 
+plot(wisconsinCsubm, col = theColInd$plot, add = TRUE, lwd = 0.2) 
+plot(theBg, add = TRUE, maxpixels = 10^7) 
+mapmisc::legendBreaks("right", theColInd, bty = "n", inset = 0) 
+mapmisc::map.new(wisconsinCsubm, 0.85) 
+plot(wisconsinCsubm, col = theColWhite$plot, add = TRUE, lwd = 0.2)
+plot(theBg, add = TRUE, maxpixels = 10^7) 
+mapmisc::legendBreaks("right", theColWhite, bty = "n", inset = 0) 
+theColRandom = mapmisc::colourScale(resTrump$data$random.mean, col = "Spectral", breaks = 11, style = "quantile", rev = TRUE, dec = 1) 
+theColFit = mapmisc::colourScale(resTrump$data$fitted.invlogit, col = "RdBu", rev = TRUE, breaks = sort(unique(setdiff(c(0, 1, seq(0.2, 0.8, by = 0.1)), 0.5))), style = "fixed")
+mapmisc::map.new(wisconsinCsubm, 0.85) 
+plot(resTrump$data, col = theColRandom$plot, add = TRUE, lwd = 0.2)
+plot(theBg, add = TRUE, maxpixels = 10^7) 
+mapmisc::legendBreaks("topright", theColRandom) 
+mapmisc::map.new(wisconsinCsubm, 0.85) 
+plot(resTrump$data, col = theColFit$plot, add = TRUE, lwd = 0.2) 
+plot(theBg, add = TRUE, maxpixels = 10^7) 
+mapmisc::legendBreaks("topright", theColFit)
+```
+
+```{r, cache=TRUE}
+table = resTrump$parameters$summary[, paste0(c(0.5, 0.025, 0.975), "quant")]
+rownames(table)[1] = "Baseline Odds"
+table[1:4, ] = exp(table[1:4, ])
+knitr::kable(table, digits = 5, caption = "Table 1: Posterior Quantiles")
+```
+
+# Q2
+```{r, cache=TRUE, message=FALSE}
+load('England_shp.RData')
+load('englandRes.RData')
+```
+
+```{r, cache=TRUE}
+table2 = englandRes$parameters$summary[, paste0(c(0.5, 0.025, 0.975), "quant")]
+rownames(table2)[1] = "Baseline Odds"
+table2[1:4, ] = exp(table2[1:4, ])
+knitr::kable(table2, digits = 5, caption = "Table 2: Posterior Quantiles")
+```
+
+```{r, cache=TRUE, message=FALSE}
+
+UK_shp$logExpected = log(UK_shp$E) # remove an island 
+UK2 = UK_shp[grep("Wight", UK_shp$Name, invert = TRUE), ]
+fCol = mapmisc::colourScale(englandRes$data$fitted.exp, breaks = 9, dec = 1, style = "quantile") 
+casesCol = mapmisc::colourScale(UK2$cases, dec = -3, breaks = 12, col = "Spectral", style = "quantile", rev = TRUE)
+Ecol = mapmisc::colourScale(UK2$E, breaks = casesCol$breaks, col = casesCol$col, style = "fixed")
+actr = mapmisc::colourScale(UK2$cases/UK2$E, breaks = 9, dec = 1, style = "quantile")
+
+library("raster")
+library("sp") 
+
+mapmisc::map.new(UK2) 
+plot(UK2, col = actr$plot, add = TRUE, lwd = 0.2, main = "(A)dhid") 
+mapmisc::legendBreaks("left", fCol, bty = "n")
+
+mapmisc::map.new(UK2) 
+plot(UK2, col = fCol$plot, add = TRUE, lwd = 0.2) 
+mapmisc::legendBreaks("left", fCol, bty = "n")
+```
+
+
+```{r, cache=TRUE, message=FALSE, echo=FALSE, eval=FALSE}
+pmCol = mapmisc::colourScale(UK2$modelledpm25, breaks = 9, dec = 0, style = "quantile")
+ethCol = mapmisc::colourScale(UK2$Ethnicity, breaks = 9, digits = 1, style = "quantile")
+uCol = mapmisc::colourScale(UK2$Unemployment, breaks = 12, dec = 0, style = "quantile")
+rCol = mapmisc::colourScale(englandRes$data$random.mean, breaks = 12, dec = -log10(0.25), style = "quantile")
+
+#insetEngland1 = mapmisc::openmap(UK2, zoom = 3, fact = 4, path = "waze", crs = CRS("+init=epsg:3035")) 
+insetEngland = raster::crop(insetEngland1, extend(extent(insetEngland1), -c(25, 7, 4, 9.5) * 100 * 1000))
+
+mapmisc::map.new(UK2)
+plot(UK2, col = uCol$plot, add = TRUE, lwd = 0.2)
+mapmisc::legendBreaks("left", uCol, bty = "n")
+
+mapmisc::map.new(UK2) 
+mapmisc::insetMap(UK_shp, "topright", insetEngland, width = 0.4)
+plot(UK2, col = casesCol$plot, add = TRUE, lwd = 0.2) 
+mapmisc::legendBreaks("left", casesCol, bty = "n")
+
+mapmisc::map.new(UK2) 
+plot(UK2, col = Ecol$plot, add = TRUE, lwd = 0.2) 
+mapmisc::legendBreaks("left", casesCol, bty = "n")
+
+
+```
+
+```{r, cache=TRUE, message=FALSE, echo=FALSE}
+mapmisc::map.new(UK2) 
+plot(UK2, col = pmCol$plot, add = TRUE, lwd = 0.2, main = "(a) Plot of abb") 
+mapmisc::legendBreaks("left", pmCol, bty = "n") 
+
+# mapmisc::map.new(UK2) 
+# plot(UK2, col = ethCol$plot, add = TRUE, lwd = 0.2) 
+# mapmisc::legendBreaks("left", ethCol, bty = "n") 
+# 
+# 
+# mapmisc::map.new(UK2) 
+# plot(UK2, col = rCol$plot, add = TRUE, lwd = 0.2) 
+# mapmisc::legendBreaks("left", rCol, bty = "n")
+```
+

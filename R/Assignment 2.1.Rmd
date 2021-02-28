@@ -1,0 +1,57 @@
+---
+title: "Assignment 2"
+author: "Xinrui Wang"
+output: word_document
+---
+
+```{r, echo = TRUE, eval = TRUE, message = FALSE}
+library(INLA)
+library(Pmisc)
+sUrl = "http://www.bristol.ac.uk/cmm/media/migrated/jsp.zip" 
+dir.create(file.path("..", "data"), showWarnings = FALSE)
+(Pmisc::downloadIfOld(sUrl, file.path("..", "data")))
+school = read.fwf("../data/JSP.DAT", widths = c(2, 1, 1, 1, 2, 4, 2, 2, 1), col.names = c("school", "class", "gender", "socialClass", "ravensTest", "student", "english", "math", "year"))
+school$socialClass = factor(school$socialClass, labels = c("I", "II", "IIIn", "IIIm", "IV", "V", "longUnemp", "currUnemp", "absent"))
+school$gender = factor(school$gender, labels = c("f", "m"))
+school$classUnique = paste(school$school, school$class)
+school$studentUnique = paste(school$school, school$class, school$student)
+school$grade = factor(school$year)
+school$mwrong = 40 - school$math #follow Poisson dist
+```
+
+```{r, cache = TRUE}
+IRes = INLA::inla(mwrong ~ socialClass + grade + gender                   + f(school, model = "iid", hyper = list(prec = list(prior = 'pc.prec', param = c(u = log(1.3), alpha = 0.5))))
+# want 1SD of difference in schools increases number of questions got wrong by 30% on average, so sigma = log(1.3)
+    + f(classUnique, model = "iid", hyper = list(prec = list(prior = 'pc.prec', param = c(u = log(1.4), alpha = 0.5))))
+# want 1SD of difference in classes increases number of questions got wrong by 40% on average, so sigma = log(1.4)
+    + f(studentUnique, model = "iid", hyper = list(prec = list(prior = 'pc.prec', param = c(u = log(1.5), alpha = 0.5)))),
+# want 1SD of difference in students increases number of questions got wrong by 50% on average, so sigma = log(1.5)
+                  control.fixed = list(mean.intercept = 0, prec.intercept = 1/(100^2), mean = 0, prec = 1/(100^2)), 
+                  data = school, family = 'poisson', control.inla = list(fast = FALSE, strategy = 'laplace'))
+```
+
+```{r}
+par(mfrow = c(1, 3), mar = c(2, 2, 1, 1.5))
+
+std = Pmisc::priorPostSd(IRes)
+
+do.call(matplot, std$school$matplot)
+do.call(legend, std$legend)
+mtext(expression(sigma), side = 1)
+
+do.call(matplot, std$classUnique$matplot)
+do.call(legend, std$legend)
+mtext(expression(sigma), side = 1)
+
+do.call(matplot, std$studentUnique$matplot)
+do.call(legend, std$legend)
+mtext(expression(sigma), side = 1)
+```
+
+
+```{r}
+# convert coefficients to natural scale
+resTable = rbind('Baseline' = exp(IRes$summary.fixed[1, c(4,3,5)]), exp(IRes$summary.fixed[-1, c(4,3,5)]), '$\\sigma$' = Pmisc::priorPost(IRes)$summary[,c(4,3,5)])
+knitr::kable(resTable, digits = 3, caption = 'Table 1: Posterior Medians & Quantiles for Baseline, ratios, and SD of random effects.')
+```
+

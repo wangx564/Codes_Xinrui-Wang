@@ -1,0 +1,250 @@
+---
+title: "STA442 A3"
+author: "Xinrui Wang"
+output: word_document
+---  
+
+```{r, cache=TRUE, message=FALSE}
+library(INLA, verbose = FALSE)
+xWide = read.table(paste0("https://www.stat.gouv.qc.ca/statistiques/", "population-demographie/deces-mortalite/", "WeeklyDeaths_QC_2010-2020_AgeGr.csv"), sep = ";", skip = 7, col.names = c("year", "junk", "age", paste0("w", 1:53)))
+xWide = xWide[grep("^[[:digit:]]+$", xWide$year), ] 
+x = reshape2::melt(xWide, id.vars = c("year", "age"), measure.vars = grep("^w[[:digit:]]+$", colnames(xWide)))
+x$dead = as.numeric(gsub("[[:space:]]", "", x$value))
+x$week = as.numeric(gsub("w", "", x$variable)) 
+x$year = as.numeric(x$year) 
+x = x[order(x$year, x$week, x$age), ]
+```
+
+```{r, fig.height = 4, fig.width = 7, fig.cap = 'Figure 2'}
+newYearsDay = as.Date(ISOdate(x$year, 1, 1)) 
+x$time = newYearsDay + 7 * (x$week - 1) 
+x = x[!is.na(x$dead), ] 
+x = x[x$week < 53, ]
+plot(x[x$age == "Total", c("time", "dead")], type = "o", log = "y", xlab = "Year", ylab = "Total Death", main = "Plot of Total Death Over Time")
+```
+
+```{r, cache = TRUE, fig.height = 6, fig.width = 9, fig.cap = 'Figure 1'}
+xWide2 = reshape2::dcast(x, week + age ~ year, value.var = "dead") 
+Syear = grep("[[:digit:]]", colnames(xWide2), value = TRUE) 
+Scol = RColorBrewer::brewer.pal(length(Syear), "Spectral") 
+matplot(xWide2[xWide2$age == "Total", Syear], type = "l", lty = 1.5, col = Scol, xlab = "Week", ylab = "Total Death", main = "Total Death Over Time by Week and Year")
+legend("topright", col = Scol, legend = Syear, bty = "n", lty = 1, lwd = 3)
+m = max(na.omit(xWide2$"2020"))
+w = xWide2$week[which(xWide2$"2020" == m)]
+abline(v = w, col = "black", lty = 2, lwd = 2)
+text(21, 2020, paste("Week", as.character(w)))
+text(22, 1970, "(Around May)")
+abline(v = 10, col = "black", lty = 2, lwd = 2)
+text(12, 1450, "March")
+abline(v = 36, col = "black", lty = 2, lwd = 2)
+text(39, 1250, "September")
+```
+
+```{r}
+#Divide the data into pre and post covid, add extra dates to data so that INLA will create forecasts
+dateCutoff = as.Date("2020/3/1") 
+xPreCovid = x[x$time < dateCutoff, ] 
+xPostCovid = x[x$time >= dateCutoff, ] 
+#want to forecast what the total death would be in 2020 if no covid
+toForecast = expand.grid(age = unique(x$age), time = unique(xPostCovid$time), dead = NA) 
+xForInla = rbind(xPreCovid[, colnames(toForecast)], toForecast) 
+xForInla = xForInla[order(xForInla$time, xForInla$age), ]
+```
+
+```{r}
+xForInla$timeNumeric = as.numeric(xForInla$time) 
+xForInla$timeForInla = (xForInla$timeNumeric - as.numeric(as.Date("2015/1/1")))/365.25 
+xForInla$timeIid = xForInla$timeForInla
+
+xForInla$sin12 = sin(2 * pi * xForInla$timeNumeric/365.25) 
+xForInla$sin6 = sin(2 * pi * xForInla$timeNumeric * 2/365.25) 
+xForInla$cos12 = cos(2 * pi * xForInla$timeNumeric/365.25) 
+xForInla$cos6 = cos(2 * pi * xForInla$timeNumeric * 2/365.25)
+```
+## Hypothesis 1
+```{r, cache=TRUE}
+xForInla1 = xForInla[xForInla$age == '0-49 years old', ] 
+res1 = inla(dead ~ sin12 + sin6 + cos12 + cos6 + 
+             f(timeIid, prior = 'pc.prec', param = c(log(1.15), 0.5)) +
+             f(timeForInla, model = 'rw2', prior = 'pc.prec', param = c(0.05, 0.5)),
+data = xForInla1, control.predictor = list(compute = TRUE, link = 1), control.compute = list(config = TRUE), family = 'poisson')
+```
+
+```{r, cache=TRUE, fig.height = 5, fig.width = 7, fig.cap = 'Figure 3'}
+qCols = paste0(c(0.5, 0.025, 0.975), "quant") 
+t =  Pmisc::priorPostSd(res1)$summary[, qCols]
+knitr::kable(t, caption = 'Table 1: Posterior Medians & Quantiles of Seasonal Terms and SD', digit = 5)
+matplot(xForInla1$time, res1$summary.random$timeForInla[, c("0.5quant", "0.975quant", "0.025quant")], type = "l", lty = c(1, 2, 2), col = "black", xlab = "Year", ylab = "", main = "Plot of Random Effect Without Seasonality")
+```
+
+```{r}
+#Variables for plots
+sampleList1 = INLA::inla.posterior.sample(50, res1, selection = list(Predictor = 0)) 
+sampleIntensity1 = exp(do.call(cbind, Biobase::subListExtract(sampleList1, "latent"))) 
+sampleDeaths1 = matrix(rpois(length(sampleIntensity1), sampleIntensity1), nrow(sampleIntensity1), ncol(sampleIntensity1))
+
+#calculate excess deaths
+xPostCovid1 = xPostCovid[xPostCovid$age == "0-49 years old", ]
+xPostCovidForecast1 = sampleDeaths1[match(xPostCovid1$time, xForInla1$time), ] 
+excessDeaths1 = xPostCovid1$dead - xPostCovidForecast1
+#calculate the quantile of the posterior sample
+q0 = data.frame(apply(sampleDeaths1, 1, quantile, c(0.025,0.975)))
+samd1 = cbind(data.frame(sampleDeaths1), t(q0))
+
+q1 = data.frame(apply(xPostCovidForecast1, 1, quantile, c(0.025,0.975)))
+pcf1 = cbind(data.frame(xPostCovidForecast1), t(q1))
+
+q2 = data.frame(apply(excessDeaths1, 1, quantile, c(0.025,0.975)))
+exd1 = cbind(data.frame(excessDeaths1), t(q2))
+#color/style/lwd for posterior plots + quantile
+cl = function(df)
+  return (c(rep(gray(level = 0.2, alpha = 0.5), ncol(df) - 2), rep("black", 2)))
+
+sty = function(df)
+  return (c(rep(1, ncol(df) - 2), rep(2, 2)))
+
+wd = function(df)
+  return (c(rep(0.5, ncol(df) - 2), rep(2, 2)))
+```
+
+
+```{r aGraph, cache=TRUE, fig.height = 8, fig.width = 11, fig.cap = 'Figure 4'}
+
+lmat2 = matrix(c(1, 3, 2, 4))
+layout(mat = lmat2, height = 8, width = 12)
+par(mfrow = c(2, 2))
+
+#plot 1 
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(xForInla1$time, res1$summary.fitted.values[, qCols], type = "l", ylim = c(40, 105), col = c("black", "dark grey", "dark grey"), lwd = c(1.5, 2, 2), log = "y", xlab = "Year", ylab = "Death", main = "(a) Plot of Predicted and Actual Death Over Time")
+points(x[x$age == '0-49 years old', c("time", "dead")], cex = 0.5, pch = 16, col = "red")
+abline(v = as.Date("2020/9/1"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/1/1"), 45, "September")
+
+#plot 2
+#Take posterior samples and compare with Actual Data
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(xForInla1$time, samd1, col = cl(samd1), lty = sty(samd1), lwd = wd(samd1), type = "l", log = "y", xlab = "Year", ylab = "Death", main = "(b) Plot of Posterior Samples and Actual Death")
+points(x[x$age == "0-49 years old", c("time", "dead")], cex = 0.7, pch = 16, col = "red")
+abline(v = as.Date("2020/9/1"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/1/1"), 37, "September")
+
+#plot 3
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(xPostCovid1$time, pcf1, type = "l", col = cl(pcf1), lty = sty(pcf1), lwd = wd(pcf1), xlab = "Month", ylab = "Death", main = "(c) Plot of Forecasted and Actual Death after March, 2020")
+points(xPostCovid1[, c("time", "dead")], col = "red", cex = 0.9, pch = 16)
+abline(v = as.Date("2020/9/1"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/9/1"), 35, "September")
+
+#plot 4
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(xPostCovid1$time, exd1, type = "l", col = cl(pcf1), lty = sty(pcf1), lwd = wd(pcf1), xlab = "Month", ylab = "Excess Death", main = "(d) Plot of Excess Death after March, 2020")
+abline(h = 0, col = "red", lty = 2, lwd = 2)
+abline(v = as.Date("2020/9/1"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/9/1"), 35, "September")
+```
+
+## Hypothesis 2
+```{r, cache=TRUE}
+xForInla2 = xForInla[xForInla$age == '70 years old and over', ] 
+res2 = inla(dead ~ sin12 + sin6 + cos12 + cos6 + 
+             f(timeIid, prior = 'pc.prec', param = c(log(1.15), 0.5)) +
+             f(timeForInla, model = 'rw2', prior = 'pc.prec', param = c(0.05, 0.5)),
+data = xForInla2, control.predictor = list(compute = TRUE, link = 1), control.compute = list(config = TRUE), family = 'poisson')
+```
+
+```{r, cache=TRUE, fig.height = 5, fig.width = 7, fig.cap = 'Figure 5'}
+t = rbind(res2$summary.fixed[, qCols], Pmisc::priorPostSd(res2)$summary[, qCols])
+knitr::kable(t, caption = 'Table 2: Posterior Medians & Quantiles of Seasonal Terms and SD', digit = 5)
+matplot(xForInla2$time, res2$summary.random$timeForInla[, c("0.5quant", "0.975quant", "0.025quant")], type = "l", lty = c(1, 2, 2), col = "black", xlab = "Year", ylab = "", main = "Plot of Random Effect Without Seasonality")
+```
+
+```{r}
+#Variables for plots
+d = as.Date("2019/6/1")
+ind = which(xForInla2$time > d)
+tPlot = xForInla2$time[which(xForInla2$time > d)]
+
+sampleList2 = INLA::inla.posterior.sample(50, res2, selection = list(Predictor = 0)) 
+sampleIntensity2 = exp(do.call(cbind, Biobase::subListExtract(sampleList2, "latent"))) 
+sampleDeaths2 = matrix(rpois(length(sampleIntensity2), sampleIntensity2), nrow(sampleIntensity2), ncol(sampleIntensity2))
+
+#calculate excess deaths
+xPostCovid2 = xPostCovid[xPostCovid$age == '70 years old and over', ]
+xPostCovidForecast2 = sampleDeaths2[match(xPostCovid2$time, xForInla2$time), ] 
+excessDeaths2 = xPostCovid2$dead - xPostCovidForecast2
+
+#calculate the quantile of the posterior sample
+q3 = data.frame(apply(sampleDeaths2, 1, quantile, c(0.025,0.975)))
+samd2 = cbind(data.frame(sampleDeaths2), t(q3))
+
+q4 = data.frame(apply(xPostCovidForecast2, 1, quantile, c(0.025,0.975)))
+pcf2 = cbind(data.frame(xPostCovidForecast2), t(q4))
+
+q5 = data.frame(apply(excessDeaths2, 1, quantile, c(0.025,0.975)))
+exd2 = cbind(data.frame(excessDeaths2), t(q5))
+```
+
+
+```{r aGraphAgain, cache=TRUE, fig.height = 8, fig.width = 11, fig.cap = 'Figure 6'}
+
+lmat3 = matrix(c(1, 3, 5, 2, 4, 6))
+layout(mat = lmat3, height = 6, width = 9)
+par(mfrow = c(3, 2))
+
+#plot 1 
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(xForInla2$time, res2$summary.fitted.values[, qCols], type = "l", ylim = c(600, 1300), col = c("black", "dark grey", "dark grey"), lwd = c(1.5, 2, 2), log = "y", xlab = "Year", ylab = "Death", main = "(a) Plot of Predicted and Actual Death Over Time")
+points(x[x$age == '70 years old and over', c("time", "dead")], cex = 0.5, pch = 16, col = "red")
+abline(v = as.Date("2020/3/1"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/1/1"), 650, "March")
+abline(v = as.Date("2020/5/30"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/7/1"), 700, "May")
+
+#plot 2 
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(tPlot, res2$summary.fitted.values[ind, qCols], type = "l", ylim = c(650, 1300), col = c("black", "dark grey", "dark grey"), lwd = c(1.5, 2, 2), log = "y", xlab = "Year", ylab = "Death", main = "(b) Plot of Predicted and Actual Death after June 1st, 2019")
+pPlot = x$age == '70 years old and over' & x$time > d
+points(x[pPlot, c("time", "dead") ], cex = 0.8, pch = 16, col = "red")
+abline(v = as.Date("2020/3/1"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/3/1"), 800, "March")
+abline(v = as.Date("2020/5/30"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/5/30"), 800, "May")
+
+#plot 3
+#Take posterior samples and compare with Actual Data
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(xForInla2$time, samd2, col = cl(samd2), lty = sty(samd2), lwd = wd(samd2), type = "l", log = "y", xlab = "Year", ylab = "Death", main = "(c) Plot of Posterior Samples and Actual Death")
+points(x[x$age == '70 years old and over', c("time", "dead")], cex = 0.7, pch = 16, col = "red")
+abline(v = as.Date("2020/3/1"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/1/1"), 650, "March")
+abline(v = as.Date("2020/5/30"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/7/1"), 700, "May")
+
+#plot 4
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(xForInla2$time, samd2, col = cl(samd2), lty = sty(samd2), lwd = wd(samd2), type = "l", log = "y", xlim = as.Date(c("2019/6/1", "2020/11/1")), xlab = "Year", ylab = "Death", main = "(d) Plot of Posterior Samples and Actual Death after June 1st, 2019")
+points(x[x$age == '70 years old and over', c("time", "dead")], col = "red", cex = 0.7, pch = 16)
+abline(v = as.Date("2020/3/1"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/3/1"), 600, "March")
+abline(v = as.Date("2020/5/30"), col = "blue", lty = 2, lwd = 1)
+text(as.Date("2020/5/30"), 600, "May")
+
+#plot 5
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(xPostCovid2$time, pcf2, type = "l", ylim = c(550, 1700), col = cl(pcf2), lty = sty(pcf2), lwd = wd(pcf2), xlab = "Month", ylab = "Death", main = "(e) Plot of Forecasted and Actual Death after March, 2020")
+abline(v = as.Date("2020/3/1"), col = "blue", lty = 2, lwd = 2)
+text(as.Date("2020/3/15"), 650, "March")
+abline(v = as.Date("2020/5/30"), col = "blue", lty = 2, lwd = 2)
+text(as.Date("2020/5/30"), 650, "May")
+points(xPostCovid2[, c("time", "dead")], col = "red", cex = 0.7, pch = 16)
+
+#plot 6
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(xPostCovid2$time, exd2, type = "l", col = cl(exd2), lty = sty(exd2), lwd = wd(exd2), xlab = "Month", ylab = "Excess Death", main = "(f) Plot of Excess Death after March, 2020")
+abline(h = 0, col = "red", lty = 2, lwd = 2)
+abline(v = as.Date("2020/3/1"), col = "blue", lty = 2, lwd = 2)
+text(as.Date("2020/3/15"), 600, "March")
+abline(v = as.Date("2020/5/30"), col = "blue", lty = 2, lwd = 2)
+text(as.Date("2020/5/30"), 600, "May")
+```

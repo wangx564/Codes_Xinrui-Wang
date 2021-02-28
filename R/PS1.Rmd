@@ -1,0 +1,142 @@
+---
+title: "STA442 Assignment1"
+author: "Xinrui Wang"
+date: "null"
+output:
+  word_document: default
+  html_document: default
+---
+## Affairs
+```{r, echo = TRUE, eval = TRUE, message = FALSE}
+library(AER)
+library(Pmisc)
+
+data('Affairs', package = 'AER')
+Affairs$ever = Affairs$affairs > 0 
+Affairs$ageL = (Affairs$age - median(Affairs$age))/sd(Affairs$age)
+Affairs$year = (Affairs$yearsmarried - median(Affairs$yearsmarried))/sd(Affairs$yearsmarried)
+Affairs$religious = factor(Affairs$religiousness, levels = c(2,1,3,4,5), labels = c('no','anti','low','med','high'))
+Affairs$edu = factor(Affairs$education, levels = c(9, 12, 14, 16, 17, 18, 20), labels = c('grade', 'high', 'college', 'college grade', 'grad', 'master', 'PHD and above'))
+Affairs$rate = factor(Affairs$rating, levels = c(1, 2, 3, 4, 5), labels = c('very unhappy', 'somewhat unhappy', 'average', 'happier than average', 'very happy'))
+```
+In the first model, we only consider the covariates `children` and the interaction term of `gender` and `children`. 
+```{r, echo = TRUE, eval = TRUE, message = FALSE}
+#First, take a look at the model with only contains gender and children
+#so far, everything is on log(odds) scale
+afm1 = glm(ever ~ gender + children + gender:children, data = Affairs, family = 'binomial')
+```
+In the second model, covariates `age`, `years married`, `religiousness` are added in addtion to the first one. 
+```{r, echo = TRUE, eval = TRUE, message = FALSE}
+#consider the model with more confounders
+afm2 = glm(ever ~ gender + children + gender:children + ageL + year + religious, data = Affairs, family = 'binomial')
+```
+In the third model, `education` and `self ratings of marriage happiness` are included on top of model 2.
+```{r, echo = TRUE, eval = TRUE, message = FALSE}
+#consider the model with more factors added
+afm3 = glm(ever ~ gender + children + gender:children + ageL + year + religious + edu + rate, data = Affairs, family = 'binomial')
+```
+According to the result of LRT comparing the first and the second model, a very small p-value means that the $H_0$ stating the simpler model can explain the data as well as the complex model is rejected. Therefore, the second model is better among the two. 
+```{r, echo = TRUE, eval = TRUE, message = FALSE}
+#coduct LRT on different pairs of models
+knitr::kable(lmtest::lrtest(afm1, afm2), caption = "Table 1")
+```
+According to the result of LRT comparing the first and the third model, a very small p-value here shows that the third model is better than the first model at explaining our data.
+```{r, echo = TRUE, eval = TRUE, message = FALSE}
+knitr::kable(lmtest::lrtest(afm1, afm3),  caption = "Table 2")
+```
+In the end, according to the result of comparing the second and the third model using LRT, a very small p-value here shows that the third model is better than the second model at explaining our data.
+```{r, echo = TRUE, eval = TRUE, message = FALSE}
+knitr::kable(lmtest::lrtest(afm2, afm3), caption = "Table 3")
+```
+As model 3 best explians the data, I will analyze the summary statistics from model 3.
+
+```{r, echo = TRUE, eval = TRUE, message = FALSE}
+(theCiMat = Pmisc::ciMat(0.95))
+parTable3 = summary(afm3)$coef[,rownames(theCiMat)] %*% theCiMat
+rownames(parTable3)[1] = "Baseline"
+knitr::kable(exp(parTable3), digits = 3, caption = "Table 4")
+```
+The first row of the table is the baseline odds of irreligious women who are under 20 years old, married for 3 months or less, have no children, and with grade-school level of education and somewhat unhappy marriage.
+
+## Smoking
+```{r}
+dataDir = "C:/Users/Owner/Desktop/STA442/Assignment" 
+smokeFile = file.path(dataDir, "smoke.RData") 
+if (!file.exists(smokeFile)) {download.file("http://pbrown.ca/teaching/appliedstats/data/smoke.RData", smokeFile)} 
+(load(smokeFile))
+```
+
+```{r, eval=TRUE, echo=TRUE, message=FALSE}
+library(tidyverse)
+colna = which(is.na(names(smoke)))
+for (i in 1:length(colna)) {
+  ind = colna[i]
+  names(smoke)[ind] = paste("NoName", "i")
+}
+```
+
+```{r, eval=TRUE, echo=TRUE, message=FALSE}
+#construct the dataset with variables relevant to hypothesis 1
+col = c("ever_cigars_cigarillos_or", "RuralUrban", "Race", "Sex", "Age")
+smokeSub = smoke[, match(col, names(smoke))][which(smoke$Age >= 10),] %>% na.omit()
+smokeSub$AgeC = smokeSub$Age - median(smokeSub$Age)
+```
+
+
+```{r, eval=TRUE, echo=TRUE, message=FALSE}
+sm1 = glm(ever_cigars_cigarillos_or ~ RuralUrban + Race + RuralUrban:Race, family = binomial(link = "logit"), data = smokeSub)
+``` 
+
+```{r}
+sm2 = glm(ever_cigars_cigarillos_or ~ RuralUrban + Race + RuralUrban:Race + AgeC + Sex, family = binomial(link = "logit"), data = smokeSub)
+``` 
+
+```{r, eval=TRUE, echo=TRUE, message=FALSE}
+knitr::kable(lmtest::lrtest(sm1,sm2), caption = "Table 1")
+```
+
+```{r,eval=TRUE, echo=TRUE, message=FALSE}
+(theCiMat = Pmisc::ciMat(0.95))
+parTable1 = summary(sm2)$coef[,rownames(theCiMat)] %*% theCiMat
+rownames(parTable1)[1] = "Baseline"
+knitr::kable(exp(parTable1), digits = 3, caption = "Table 2")
+```
+
+
+```{r, eval=TRUE, echo=TRUE, message=FALSE}
+#construct the dataset with variables relevant to hypothesis 2
+names(smoke) = make.unique(names(smoke), sep="_")
+match("ever_ecigarette", names(smoke))
+match("ever_seen_anyone_ecigaret", names(smoke))
+#view(names(smoke)[36:103])
+smokeSub2 = smoke %>% select(ever_ecigarette, Age, Sex, RuralUrban, Race, Do_you_believe_that_eciga, how_many_days_smell_the_v, ever_seen_anyone_ecigaret)
+names(smokeSub2)[6:ncol(smokeSub2)] = c("ecigvscig", "smell_the_vapor", "ecig_near_school")
+
+smokeSub2 = smokeSub2[which(smoke$Age >= 10),] %>%
+  filter(!grepl(paste(c(".N", ".Z"), collapse = "|"), ecigvscig)) %>% na.omit()
+smokeSub2$AgeC = smokeSub2$Age - median(smokeSub2$Age)
+smokeSub2$vs = factor(smokeSub2$ecigvscig, levels = c("001", "002", "003", "004", "005"), labels = c('Less','Equally','More','NeverEcig','Uncertain'))
+
+smokeSub2$smell = factor(smokeSub2$smell_the_vapor, levels = c("1", "2", "3", "4", "5", "6", "7"), labels = c(0, 0.3, 0.8, 1.5, 2.9, 4.9, 6))
+smokeSub2$smell = as.double(as.character(smokeSub2$smell))
+smokeSub2$smell = (smokeSub2$smell - mean(smokeSub2$smell))/sd(smokeSub2$smell)
+```
+
+```{r}
+sm3 = glm(ever_ecigarette ~ 0 + Sex + AgeC + Race + RuralUrban + smell + ecig_near_school + vs, family = binomial(link = "logit"), data = smokeSub2)
+```
+
+```{r}
+sm4 = glm(ever_ecigarette ~ 0 + Sex + AgeC + Race:RuralUrban + smell + ecig_near_school + vs, family = binomial(link = "logit"), data = smokeSub2)
+```
+
+```{r, eval=TRUE, echo=TRUE, message=FALSE}
+knitr::kable(lmtest::lrtest(sm3,sm4), caption = "Table 3")
+```
+
+
+```{r,eval=TRUE, echo=TRUE, message=FALSE}
+(theCiMat = Pmisc::ciMat(0.95))
+parTable2 = summary(sm3)$coef[,rownames(theCiMat)] %*% theCiMat
+knitr::kable(exp(parTable2), digits = 3, caption = "Table 4")
+```

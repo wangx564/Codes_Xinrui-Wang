@@ -1,0 +1,101 @@
+---
+title: "STA442 A3"
+author: "Xinrui Wang"
+output: word_document
+---  
+
+```{r, cache=TRUE, fig.height = 4, fig.width = 7, fig.cap = 'Figure 1'}
+cUrl = paste0("http://scrippsco2.ucsd.edu/assets/data/atmospheric/", "stations/flask_co2/daily/daily_flask_co2_mlo.csv")
+cFile = basename(cUrl) 
+if (!file.exists(cFile))
+download.file(cUrl, cFile) 
+co2s = read.table(cFile, header = FALSE, sep = ",", skip = 69, stringsAsFactors = FALSE, col.names = c("day", "time", "junk1", "junk2", "Nflasks", "quality", "co2"))
+
+co2s$date = strptime(paste(co2s$day, co2s$time), format = "%Y-%m-%d %H:%M", tz = "UTC")
+# remove low-quality measurements 
+co2s = co2s[co2s$quality == 0, ]
+
+plot(co2s$date, co2s$co2, log = "y", cex = 0.3, col = "#00000040", xlab = "Time", ylab = "ppm", main = "Plot of Atmospheric CO2 Concentration Over Time")
+```
+
+```{r}
+co2ext = data.frame(cbind(co2s$day, co2s$co2))
+colnames(co2ext) = c("day", "co2")
+co2ext$day = as.Date(co2ext$day)
+co2ext$co2 = as.numeric(as.character(co2ext$co2))
+timeOrigin = as.Date("1990/1/1") 
+co2ext$timeInla = round(as.numeric(co2ext$day - timeOrigin)/365.25, 2)
+co2ext$cos12 = cos(2 * pi * co2ext$timeInla) 
+co2ext$sin12 = sin(2 * pi * co2ext$timeInla) 
+co2ext$cos6 = cos(2 * 2 * pi * co2ext$timeInla) 
+co2ext$sin6 = sin(2 * 2 * pi * co2ext$timeInla)
+```
+
+```{r, message=FALSE}
+library('INLA', verbose = FALSE) # disable some error checking in INLA 
+mm = get("inla.models", INLA:::inla.get.inlaEnv()) 
+if(class(mm) == 'function') mm = mm() 
+  mm$latent$rw2$min.diff = NULL 
+assign("inla.models", mm, INLA:::inla.get.inlaEnv())
+```
+
+```{r, cache=TRUE}
+co2res = inla(co2 ~ sin12 + cos12 + sin6 + cos6 + f(timeInla, model = 'rw2', prior = 'pc.prec', param = c(0.1, 0.5), scale.model = FALSE), control.family = list(link = 'log', hyper = list(prec = list(prior = 'pc.prec', param = c(0.1, 0.5)))), data = co2ext, family = 'gamma',control.predictor=list(compute = TRUE), control.compute = list(config = TRUE))
+```
+
+```{r, fig.height = 4, fig.width = 7, fig.cap = 'Figure 2', cache=TRUE}
+qCols = c('0.5quant','0.025quant','0.975quant')
+t = Pmisc::priorPost(co2res)$summary[,qCols]
+knitr::kable(t, caption = 'Table 1')
+Stime = timeOrigin + round(365.25 * co2res$summary.random$timeInla$ID)
+matplot(Stime, co2res$summary.random$timeInla[, qCols], type = "l", col = "black", lty = c(1, 2, 2), xlab = "Time", ylab = "RW2", main = "Time Effect")
+```
+
+```{r}
+sampleList = INLA::inla.posterior.sample(100, co2res, selection = list(timeInla = 0)) 
+sampleMean = do.call(cbind, Biobase::subListExtract(sampleList, "latent"))
+sampleDeriv = apply(sampleMean, 2, diff)/diff(co2res$summary.random$timeInla$ID)
+
+forX1 = as.Date(c("1985/1/1", "2000/1/1")) 
+forX1 = seq(forX1[1], forX1[2], by = "3 months") 
+toPlot1 = which(Stime > min(forX1) & Stime < max(forX1))
+
+forX2 = as.Date("2015/1/1")
+forX2 = seq(forX2[1], max(co2ext$day), by = "1 month") 
+toPlot2 = which(Stime > min(forX2))
+```
+
+```{r aGraph, cache=TRUE, fig.height = 6, fig.width = 8, fig.cap = 'Figure 3'}
+
+#4 plots, 2 for each period, 1 fitted and 1 derivatives
+lmat = matrix(c(1, 3, 2, 4))
+layout(mat = lmat, height = 6, width = 9)
+par(mfrow = c(2, 2))
+
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+
+matplot(Stime[toPlot1], co2res$summary.fitted.values[toPlot1, qCols], type = "l", col = "black", lty = c(1, 2, 2), log = "y", xlab = "Time", ylab = "ppm")
+abline(v = as.Date("1989/11/01"), col = "red", lty = 2)
+title(main = "Fitted 1", line = 0.5,font = 1.5)
+
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(Stime[toPlot1], sampleDeriv[toPlot1, ], type = "l", lty = 1, lwd = 1, xaxs = "i", col = "#00000050", xlab = "Time", ylab = "deriv", xaxt = "n", ylim = quantile(sampleDeriv[toPlot1, ], c(0.01, 0.995)))
+axis(1, as.numeric(forX1), format(forX1, "%b%Y"))
+abline(v = as.Date("1989/11/01"), col = "red", lty = 2, lwd = 2)
+title(main = "Derivative 1", line = 0.5,font = 1.5)
+
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+matplot(Stime[toPlot2], co2res$summary.fitted.values[toPlot2, qCols], type = "l", col = "black", lty = c(1, 2, 2), log = "y", xlab = "Time", ylab = "ppm")
+abline(v = as.Date("2020/02/01"), col = "red", lty = 2)
+title(main = "Fitted 2", line = 0.5,font = 1.5)
+
+par(mar = c(2.5, 2.5, 3, 0.1), cex = 0.8)
+tp = toPlot2[1:length(toPlot2) - 1]
+matplot(Stime[tp], sampleDeriv[tp, ], type = "l", lty = 1, lwd = 2, xaxs = "i", col = "#00000050", xlab = "Time", ylab = "deriv", xaxt = "n", ylim = quantile(sampleDeriv[tp, ], c(0.01, 0.995)))
+axis(1, as.numeric(forX2), format(forX2, "%b%Y"))
+abline(v = as.Date("2020/02/01"), col = "red", lty = 2, lwd = 2)
+title(main = "Derivative 2", line = 0.5, font = 1.5)
+```
+
+
+

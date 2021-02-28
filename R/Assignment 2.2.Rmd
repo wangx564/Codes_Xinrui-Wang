@@ -1,0 +1,193 @@
+---
+title: "Assignment 2"
+author: "Xinrui Wang"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r, echo = TRUE, eval = TRUE, message = FALSE}
+library(INLA)
+library(Pmisc)
+dataDir = "../data" 
+smokeFile = file.path(dataDir, "smoke2014.RData") 
+if (!file.exists(smokeFile)) {
+  download.file("http://pbrown.ca/teaching/appliedstats/data/smoke2014.RData", smokeFile)
+}
+load(smokeFile)
+```
+
+```{r}
+s = smoke[,c('Age','ever_cigarettes','Sex','Race', 
+        'state','school', 'RuralUrban')]
+s = na.omit(s)
+s$y = as.numeric(s$ever_cigarettes)
+
+forInla = s[which(s$Age > 10),]
+forInla$state = as.character(forInla$state)
+
+forInla$ageFac = relevel(factor(forInla$Age), '14')
+forInla$Race = factor(forInla$Race)
+forInla$Sex = factor(forInla$Sex)
+forInla$RuralUrban = factor(forInla$RuralUrban)
+```
+
+```{r, cache = TRUE}
+toPredict = expand.grid(
+    ageFac = levels(forInla$ageFac),
+    Race = levels(forInla$Race),
+    Sex = levels(forInla$Sex),
+    RuralUrban = levels(forInla$RuralUrban)
+    )
+
+forLincombs = do.call(inla.make.lincombs, 
+  as.data.frame(model.matrix( ~ Race*ageFac*Sex*RuralUrban, 
+    data = toPredict)))
+```
+
+```{r, cache = TRUE}
+INRes = INLA::inla(y ~ Race*ageFac*Sex*RuralUrban 
+  + f(school, model = "iid", hyper = list(prec = list(prior = 'pc.prec', param = c(u = log(1.3), alpha = 0.1))))
+# want 1SD of difference in schools increases cigarette smoking by 30%, so u = log(1.3)
+  + f(state, model = "iid", hyper = list(prec = list(prior = 'pc.prec', param = c(u = log(2.5), alpha = 0.5)))),
+# want 1SD of difference in states increases cigarette smoking by 250% on average, so u = log(2.5)
+  lincomb = forLincombs, control.inla = list(strategy = "gaussian"), data = forInla, family = 'binomial')
+```
+```{r,  cache = TRUE,eval = FALSE, echo=FALSE}
+#test prior sensitivity by changing priors
+INRes2 = INLA::inla(y ~ Race*ageFac*Sex*RuralUrban 
+  + f(school, model = "iid", hyper = list(prec = list(prior = 'pc.prec', param = c(u = 99, alpha = 0.1))))
+
+  + f(state, model = "iid", hyper = list(prec = list(prior = 'pc.prec', param = c(u = 99, alpha = 0.5)))),
+
+  lincomb = forLincombs, control.inla = list(strategy = "gaussian"), data = forInla, family = 'binomial')
+```
+
+```{r,eval = FALSE, echo=FALSE}
+par(mfrow = c(2,1), mar = c(2, 2, 1.5, 1))
+std = Pmisc::priorPostSd(INRes)
+std2 = Pmisc::priorPostSd(INRes2)
+
+plot(std$school$posterior, type='l', xlab='sd', ylab='dens',
+  xlim = c(0,1), col='blue')
+lines(std$school$prior, col='blue', lty=2)
+legend('topright', lty=1:2, lwd=1, legend = c('post','prior'), bty='n')
+lines(std2$school$posterior, col='red')
+lines(std2$school$prior, col='red', lty=2)
+mtext("school-level", side=1)
+
+plot(std$state$posterior, type='l', xlab='sd', ylab='dens',
+  xlim = c(0,1), col='blue')
+lines(std$state$prior, col='blue', lty=2)
+legend('topright', lty=1:2, lwd=1, legend = c('post','prior'), bty='n')
+lines(std2$state$posterior, col='red')
+lines(std2$state$prior, col='red', lty=2)
+mtext("state-level", side=1)
+```
+
+```{r, cache = TRUE, eval = FALSE, echo=FALSE}
+#1st task
+
+resTable = rbind('Baseline Odds' = exp(INRes$summary.fixed[1, c(4,3,5)]), exp(INRes$summary.fixed[2:16, c(4,3,5)]), '$\\sigma$' = Pmisc::priorPost(INRes)$summary[, c(4,3,5)])
+knitr::kable(resTable, digits = 3, caption = 'Table 2: Posterior Medians & Quantiles for Baseline Odds, Odds ratios, and SD of random effects')
+```
+
+```{r, cache=TRUE}
+#2nd task
+l = match("Raceblack:ageFac11:SexF:RuralUrbanRural", rownames(INRes$summary.fixed))[1]
+d = INRes$summary.fixed[l:nrow(INRes$summary.fixed), c(4,3,5)]
+r = c("black", "hispanic")
+df = c(NA)
+
+for(i in 1:nrow(d)){
+  rn = rownames(d)[i]
+  for(j in 1:length(r)){
+    if(grepl(r[j], rn, fixed = TRUE)){
+      df = rbind(df, d[i,])
+    }
+  }
+}
+dd = INRes$summary.fixed[, c(4,3,5)]
+l2 = match("Raceblack:ageFac11", rownames(dd))[1] - 1
+df2 = dd[2:l2, ]
+
+resTable2 = rbind(exp(INRes$summary.fixed[1, c(4,3,5)]), exp(df2), exp(na.omit(df)))
+rownames(resTable2)[1] = 'Baseline Odds' 
+knitr::kable(resTable2, digits = 3, caption = 'Table 3: Posterior Medians & Quantiles for Baseline Odds and Odds Ratios')
+```
+
+```{r, cache = TRUE}
+op = par(mfrow = c(2,2),
+          oma = c(5,4,0,0) + 0.1,
+          mar = c(0,0,1,1) + 0.1)
+
+# create matrix of predicted probabilities
+theCoef = exp(INRes$summary.lincomb.derived[, c("0.5quant",
+"0.025quant", "0.975quant")])
+theCoef = theCoef/(1 + theCoef)
+
+# create an x axis, shift age by Race
+toPredict$ageFac = as.numeric(as.character(toPredict$ageFac))
+toPredict$shiftX = as.numeric(toPredict$Race)/10
+toPredict$x = toPredict$ageFac + toPredict$shiftX
+
+# only plot rural males
+toPlot = toPredict$Sex == "M" & toPredict$RuralUrban ==
+"Rural"
+plot(toPredict[toPlot, "x"], theCoef[toPlot, "0.5quant"], xlim = c(10.5, 19.5), ylim = c(0, 1), pch = 15, col = toPredict[toPlot, "Race"], axes = FALSE)
+axis(side = 1, labels = FALSE)
+axis(side = 2, labels = TRUE)
+segments(toPredict[toPlot, "x"], theCoef[toPlot, "0.025quant"],
+y1 = theCoef[toPlot, "0.975quant"], col = toPredict[toPlot,
+"Race"])
+legend("topleft", fill = 1:nlevels(toPredict$Race),
+legend = levels(toPredict$Race), bty = "n", ncol = 2, title = "Race", cex = 0.75)
+
+# only plot urban males
+toPlot = toPredict$Sex == "M" & toPredict$RuralUrban ==
+"Urban"
+plot(toPredict[toPlot, "x"], theCoef[toPlot, "0.5quant"],
+ xlim = c(10.5, 19.5), ylim = c(0, 1), pch = 15, col = toPredict[toPlot, "Race"], axes = FALSE)
+axis(side = 1, labels = FALSE)
+axis(side = 2, labels = FALSE)
+segments(toPredict[toPlot, "x"], theCoef[toPlot, "0.025quant"],
+y1 = theCoef[toPlot, "0.975quant"], col = toPredict[toPlot,
+"Race"])
+legend("topleft", fill = 1:nlevels(toPredict$Race),
+legend = levels(toPredict$Race), bty = "n",
+title = "Race", cex = 0.75)
+
+# only plot rural females
+toPlot = toPredict$Sex == "F" & toPredict$RuralUrban ==
+"Rural"
+plot(toPredict[toPlot, "x"], theCoef[toPlot, "0.5quant"], xlim = c(10.5, 19.5), ylim = c(0, 1), pch = 15, col = toPredict[toPlot, "Race"], axes = FALSE)
+axis(side = 1, labels = TRUE)
+axis(side = 2, labels = TRUE)
+segments(toPredict[toPlot, "x"], theCoef[toPlot, "0.025quant"],
+y1 = theCoef[toPlot, "0.975quant"], col = toPredict[toPlot,
+"Race"])
+legend("topleft", fill = 1:nlevels(toPredict$Race),
+legend = levels(toPredict$Race), bty = "n",
+title = "Race", cex = 0.75)
+
+# only plot urban females
+toPlot = toPredict$Sex == "F" & toPredict$RuralUrban ==
+"Urban"
+plot(toPredict[toPlot, "x"], theCoef[toPlot, "0.5quant"], xlim = c(10.5, 19.5), ylim = c(0, 1), pch = 15, col = toPredict[toPlot, "Race"], axes = FALSE)
+axis(side = 1, labels = TRUE)
+axis(side = 2, labels = FALSE)
+segments(toPredict[toPlot, "x"], theCoef[toPlot, "0.025quant"],
+y1 = theCoef[toPlot, "0.975quant"], col = toPredict[toPlot,
+"Race"])
+legend("topleft", fill = 1:nlevels(toPredict$Race),
+legend = levels(toPredict$Race), bty = "n",
+title = "Race", cex = 0.75)
+
+title(xlab = "Age",
+      ylab = "Probability",
+      outer = TRUE, line = 3)
+par(op)
+```
+
